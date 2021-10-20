@@ -7,7 +7,10 @@ import torchvision
 def dataAug(gt,lr):
 
   '''
-  do data augmentation like rotate, flip ..
+  do data augmentation in ZSSR paper like rotate, flip ..
+
+
+  return augmentated tensor gt and lr
   '''
 
   return gt, lr
@@ -28,10 +31,9 @@ def Load_Data():
     '''expected file structure:
 
 
-    main/dataset - trainimage
-                 - testimage
-                 - validimage     
+    main/dataset - name of trainimage
+
     '''
 
 
-    return trainDataLoader, validDataLoader , testDataLoader
+    return trainDataLoader #, validDataLoader , testDataLoader
