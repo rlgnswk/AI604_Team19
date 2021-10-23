@@ -1,25 +1,43 @@
 import os
+import os.path
+import torch
+import sys
 
-def file_generator(name):
+class saveData():
+    def __init__(self, args):
+        self.args = args
+        self.save_dir = os.path.join(args.saveDir, args.load)
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
+        self.save_dir_model = os.path.join(self.save_dir, 'model')
+        if not os.path.exists(self.save_dir_model):
+            os.makedirs(self.save_dir_model)
+        if os.path.exists(self.save_dir + '/log.txt'):
+            self.logFile = open(self.save_dir + '/log.txt', 'a')
+        else:
+            self.logFile = open(self.save_dir + '/log.txt', 'w')
 
-    '''
-    Make folder and files for write the logs and outputs.
+    def save_model(self, model, epoch):
+        torch.save(
+            model.state_dict(),
+            self.save_dir_model + '/model_latest.pt')
+        torch.save(
+            model.state_dict(),
+            self.save_dir_model + '/model_' + str(epoch) + '.pt')
+        torch.save(
+            model,
+            self.save_dir_model + '/model_obj.pt')
+        torch.save(
+            epoch,
+            self.save_dir_model + '/last_epoch.pt')
 
-    make folder corresponded experiment name given as input
+    def save_log(self, log):
+        sys.stdout.flush()
+        self.logFile.write(log + '\n')
+        self.logFile.flush()
 
-    1. make experiment_folder by input name
-    2. make output image folder, tensorboard log folder, log.txt
-
-    output: SR_output_Path, tensorBoard_logPath, log_path
-    
-    '''
-
-    current_path = os.getcwd()
-
-    experiment_folder = current_path + '\\' + name
-    os.mkdir(experiment_folder)
-
-    SR_outputPath = experiment_folder + '\\SR_output'
-    os.mkdir(SR_outputPath)
-    
-    return SR_outputPath
+    def load_model(self, model):
+        model.load_state_dict(torch.load(self.save_dir_model + '/model_latest.pt'))
+        last_epoch = torch.load(self.save_dir_model + '/last_epoch.pt')
+        print("load mode_status frmo {}/model_latest.pt, epoch: {}".format(self.save_dir_model, last_epoch))
+        return model, last_epoch
