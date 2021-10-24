@@ -22,6 +22,10 @@ parser.add_argument('--name', type=str)
 parser.add_argument('--gpu', type=int)
 parser.add_argument('--datasetPath', type=str)
 
+#model parameters
+parser.add_argument('--input_channel', type=int, default=3, help='netSR and netD input channel')
+parser.add_argument('--mid_channel', type=int, default=64, help='netSR middle channel')
+
 #training parameters
 parser.add_argument('--patchSize', type=int, default=128, help='patch size (GT)')
 parser.add_argument('--batchSize', type=int, default=16, help='input batch size for training')
@@ -91,14 +95,13 @@ def test(args, model, dataloader):
 # training
 def train(args):
     ################################# for gihoon's part start
-    netD = models.netD()
-    netG = models.netSR()
+    netD = models.netD(input_channel = args.input_channel, mid_channel = args.mid_channel)
+    criterion_D = nn.BCELoss()
+    optimizer_D = torch.optim.Adam(netD.parameters(), lr=args.lr)
 
-    criterion_G = 
-    optimizer_G = 
-
-    criterion_D = 
-    optimizer_D = 
+    netG = models.netSR(input_channel = args.input_channel, mid_channel = args.mid_channel)
+    criterion_G = nn.L1Loss()
+    optimizer_G = torch.optim.Adam(netG.parameters(), lr=args.lr)
 
     netD.apply(weights_init)
     netG.apply(weights_init)
