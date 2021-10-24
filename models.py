@@ -21,20 +21,20 @@ class netD(nn.Module):
         self.mid_channel = mid_channel
         super(netD, self).__init__()
         
-        self.Conv0 = Conv_block4NetD(self.input_channel , self.mid_channel//2) #output size = self.mid_channel/2 x 64 x 64
-        self.Conv1 = Conv_block4NetD(self.mid_channel // 2 , self.mid_channel) #output size = self.mid_channel x 32 x 32
-        self.Conv2 = Conv_block4NetD(self.mid_channel * 1 , self.mid_channel * 2) #output size = self.mid_channel * 2 x 16 x 16
-        self.Conv3 = Conv_block4NetD(self.mid_channel * 2 , self.mid_channel * 4) #output size = self.mid_channel * 4 x 8 x 8
-        self.Conv4 = Conv_block4NetD(self.mid_channel * 4 , self.mid_channel * 8) #output size = self.mid_channel * 8 x 8 x 8
+        self.Conv_blockIn = Conv_block4NetD(self.input_channel , self.mid_channel//2) #output size = self.mid_channel/2 x 64 x 64
+        self.Conv_block1 = Conv_block4NetD(self.mid_channel // 2 , self.mid_channel) #output size = self.mid_channel x 32 x 32
+        self.Conv_block2 = Conv_block4NetD(self.mid_channel * 1 , self.mid_channel * 2) #output size = self.mid_channel * 2 x 16 x 16
+        self.Conv_block3 = Conv_block4NetD(self.mid_channel * 2 , self.mid_channel * 4) #output size = self.mid_channel * 4 x 8 x 8
+        self.Conv_block4 = Conv_block4NetD(self.mid_channel * 4 , self.mid_channel * 8) #output size = self.mid_channel * 8 x 4 x 4
         self.Conv_last = nn.Conv2d(self.mid_channel * 8, 1, 4, 1, 0, bias=False)
         self.sigmoid_layer =  nn.Sigmoid()
 
     def forward(self, x):
-        x = self.Conv0(x)
-        x = self.Conv1(x)
-        x = self.Conv2(x) 
-        x = self.Conv3(x)
-        x = self.Conv4(x)
+        x = self.Conv_blockIn(x)
+        x = self.Conv_block1(x)
+        x = self.Conv_block2(x) 
+        x = self.Conv_block3(x)
+        x = self.Conv_block4(x)
         x = self.Conv_last(x)
         x = self.sigmoid_layer(x)
         return x
