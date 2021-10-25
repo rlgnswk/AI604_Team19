@@ -16,6 +16,13 @@ import data_utils
 from utils import *
 
 import argparse
+import time
+import math
+from math import log10
+from torch.nn import init
+import numpy as np
+from data_utils import Dataset
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--name', type=str)
@@ -64,14 +71,21 @@ def set_lr(args, epoch, optimizer):
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
+#yj
+def get_dataset(args):
+    data_train=Dataset(args)
+    dataloader = torch.utils.data.DataLoader(data_train, batch_size=args.batchSize,
+                                             drop_last=True, shuffle=True, num_workers=int(args.nThreads), pin_memory=False)
+    return dataloader
+
 #test
 def test(args, model, dataloader):
-    for batch, (im_lr, im_hr) in enumerate(testdataloader):
+    for batch, (im_lr, im_hr) in enumerate(dataloader):
         count = count + 1
         with torch.no_grad():
             im_lr = Variable(im_lr.cuda(), volatile=False)
             im_hr = Variable(im_hr.cuda())
-            output = my_model(im_lr)
+            output = model(im_lr)
 
         # denormalizing the output
         output = output.cpu()
@@ -157,6 +171,12 @@ def train(args):
             optimizer_D.zero_grad()
             loss_D.backward()
             optimizer_D.step()
+            
+            
+            
+            
+            trainDataLoader = get_dataset(args)
+            testdataloader=get_dataset(args)
 
         end = time.time()
         epoch_time = (end - start)
