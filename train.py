@@ -9,12 +9,12 @@ from torch.autograd import Variable
 from torch.utils import data
 from torchvision.utils import save_image
 import torch.optim as optim
-from torch.utils.tensorboard import SummaryWriter
-
+from tensorboardX import SummaryWriter
+from torch.autograd import Variable
 import models
-import data_utils 
-from utils import *
 
+from utils import *
+from data_utils import Dataset
 import argparse
 import time
 import math
@@ -22,17 +22,19 @@ from math import log10
 from torch.nn import init
 import numpy as np
 from data_utils import Dataset
-
+from PIL import Image
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--name', type=str)
 parser.add_argument('--gpu', type=int)
-parser.add_argument('--datasetPath', type=str)
+parser.add_argument('--datasetPath', type=str, default='./datasets')
+parser.add_argument('--datasettype', type=str, default='Set5')
 
 #model parameters
 parser.add_argument('--input_channel', type=int, default=3, help='netSR and netD input channel')
 parser.add_argument('--mid_channel', type=int, default=64, help='netSR middle channel')
-
+parser.add_argument('--nThreads', type=int, default=8, help='number of threads for data loading')
+parser.add_argument('--load', default='NetFinal', help='save result')
 #training parameters
 parser.add_argument('--patchSize', type=int, default=128, help='patch size (GT)')
 parser.add_argument('--batchSize', type=int, default=16, help='input batch size for training')
@@ -41,7 +43,8 @@ parser.add_argument('--lrDecay', type=int, default=100, help='epoch of half lr')
 parser.add_argument('--decayType', default='inv', help='lr decay function')
 parser.add_argument('--epochs', type=int, default=200, help='number of epochs to train')
 parser.add_argument('--period', type=int, default=10, help='period of evaluation')
-
+parser.add_argument('--saveDir', default='./result', help='datasave directory')
+parser.add_argument('--kerneltype', default='g02', help='save result')
 args = parser.parse_args()
 
 # xavier initialization
@@ -70,7 +73,6 @@ def set_lr(args, epoch, optimizer):
 # parameter counter
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
 #yj
 def get_dataset(args):
     data_train=Dataset(args)
@@ -78,8 +80,10 @@ def get_dataset(args):
                                              drop_last=True, shuffle=True, num_workers=int(args.nThreads), pin_memory=False)
     return dataloader
 
+
 #test
 def test(args, model, dataloader):
+    count=0
     for batch, (im_lr, im_hr) in enumerate(dataloader):
         count = count + 1
         with torch.no_grad():
@@ -130,7 +134,8 @@ def train(args):
     # load data
     ################################# for yujin's part start
     #trainDataLoader, validDataLoader , testDataLoader = data_utils.Load_Data(args.datapath)
-    trainDataLoader = data_utils.Load_Data(args.datasetPath)
+    trainDataLoader = get_dataset(args)
+    testdataloader=get_dataset(args)
     ################################# for yujin's part end
 
 
@@ -149,14 +154,19 @@ def train(args):
 
         for batch, (im_lr, im_hr) in enumerate(trainDataLoader):
             im_lr = Variable(im_lr.cuda())
+            im_lr=F.interpolate(im_lr, scale_factor=2, mode='bicubic')
             im_hr = Variable(im_hr.cuda())
             output_SR = netG(im_lr)
-
+            output_real=netD(im_hr)
+            output_fake=netD(output_SR)
             # --------------------
             # Train Generator
             # --------------------
 
-            loss_G = criterion_G(netD(output_SR), torch.ones_like(netD(output_SR)))
+            valid_hr = Variable(torch.ones_like(output_real), requires_grad=False)
+            fake = Variable(torch.zeros_like(output_fake), requires_grad=False)
+
+            loss_G = criterion_G(output_fake, fake )
             optimizer_G.zero_grad()
             loss_G.backward()
             optimizer_G.step()
@@ -165,35 +175,36 @@ def train(args):
             # Train Discriminator
             # --------------------
 
-            real_loss_D = criterion_D(netD(im_hr), torch.ones_like(netD(im_hr)))
-            fake_loss_D = criterion_D(netD(output_SR), torch.zeros_like(netD(output_SR)))
-            loss_D = (real_loss_D + fake_loss_D) / 2
+
+            loss_D = criterion_D( output_fake.detach(), fake)+criterion_D(output_real, valid_hr)
+
+
             optimizer_D.zero_grad()
             loss_D.backward()
             optimizer_D.step()
-            
-            
-            
-            
-            trainDataLoader = get_dataset(args)
-            testdataloader=get_dataset(args)
 
         end = time.time()
         epoch_time = (end - start)
         total_time = total_time + epoch_time
-
+        print(epoch)
+        '''
         if (epoch + 1) % args.period == 0:
-            log = "[{} / {}] \tLearning_rate: {:.5f}\t Generator Loss: {:.4f} \t Discriminator Loss: {:.4f} \t Time: {:.4f}".format(epoch + 1, args.epochs, learning_rate, loss_G, loss_D, total_time)
+            netG.eval()
+            netD.eval()
+            test(args, netG, testdataloader)
+            test(args, netD, testdataloader)
+            netG.train()
+            log = "[{} / {}] \tLearning_rate: {:.5f}\t Generator Loss: {:.4f} \t Discriminator Loss: {:.4f} \t Time: {:.4f}".format(epoch + 1, args.epochs, learning_rate_G, loss_G, loss_D, total_time)
             print(log)
             save.save_log(log)
-            save.save_model(my_model, epoch)
+            save.save_model(netG, epoch)
             total_time = 0
+        '''
 
-    netG.eval()
-    test(args, netG, testdataloader)
-    netG.train()
 
-    writer.close()
+
+
+    #writer.close()
 
 if __name__ == '__main__':
     train(args)
