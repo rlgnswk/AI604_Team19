@@ -100,3 +100,28 @@ class Dataset(torch.utils.data.dataset.Dataset):
 
         return img_lr, img_gt
 
+class testDataset(torch.utils.data.dataset.Dataset):
+    def __init__(self, args):
+        self.args=args
+        self.dirpath = args.datasetPath
+        self.datatype=args.datasettype
+        self.kerneltype=args.kerneltype
+        self.data_dir = os.path.join(self.dirpath, self.datatype, self.kerneltype, "ILR")  # /datasets/Set5/g02
+        self.fileList = os.listdir(self. data_dir)
+        self.imgTest=os.path.join(self.data_dir, self.fileList[1])
+
+
+
+    def __len__(self):
+
+        length=1
+        return length
+
+    def __getitem__(self, idx):
+        args = self.args
+        self.img = cv2.imread(self.imgTest)
+
+        img_hr=RGB_np2Tensor(self.img)
+
+
+        return img_hr
