@@ -21,7 +21,7 @@ import math
 from math import log10
 from torch.nn import init
 import numpy as np
-from data_utils import Dataset
+from data_utils import Dataset, testDataset
 from PIL import Image
 
 parser = argparse.ArgumentParser()
@@ -41,7 +41,7 @@ parser.add_argument('--batchSize', type=int, default=16, help='input batch size 
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
 parser.add_argument('--lrDecay', type=int, default=100, help='epoch of half lr')
 parser.add_argument('--decayType', default='inv', help='lr decay function')
-parser.add_argument('--epochs', type=int, default=200, help='number of epochs to train')
+parser.add_argument('--epochs', type=int, default=500, help='number of epochs to train')
 parser.add_argument('--period', type=int, default=10, help='period of evaluation')
 parser.add_argument('--saveDir', default='./result', help='datasave directory')
 parser.add_argument('--kerneltype', default='g02', help='save result')
@@ -80,16 +80,22 @@ def get_dataset(args):
                                              drop_last=True, shuffle=True, num_workers=int(args.nThreads), pin_memory=False)
     return dataloader
 
+def get_testdataset(args):
+    data_test=testDataset(args)
+    dataloader = torch.utils.data.DataLoader(data_test, batch_size=args.batchSize,
+                                             drop_last=True, shuffle=True, num_workers=int(args.nThreads), pin_memory=False)
+    return dataloader
+
 
 #test
-def test(args, model, dataloader):
+def test(args, modelG, dataloader):
     count=0
     for batch, (im_lr, im_hr) in enumerate(dataloader):
         count = count + 1
         with torch.no_grad():
             im_lr = Variable(im_lr.cuda(), volatile=False)
             im_hr = Variable(im_hr.cuda())
-            output = model(im_lr)
+            output = modelG(im_lr)
 
         # denormalizing the output
         output = output.cpu()
@@ -118,7 +124,7 @@ def train(args):
     optimizer_D = torch.optim.Adam(netD.parameters(), lr=args.lr)
 
     netG = models.netSR(input_channel = args.input_channel, mid_channel = args.mid_channel)
-    criterion_G = nn.L1Loss()
+    criterion_G = nn.BCELoss()
     optimizer_G = torch.optim.Adam(netG.parameters(), lr=args.lr)
 
     netD.apply(weights_init)
@@ -135,7 +141,7 @@ def train(args):
     ################################# for yujin's part start
     #trainDataLoader, validDataLoader , testDataLoader = data_utils.Load_Data(args.datapath)
     trainDataLoader = get_dataset(args)
-    testdataloader=get_dataset(args)
+    testdataloader=get_testdataset(args)
     ################################# for yujin's part end
 
 
@@ -146,11 +152,14 @@ def train(args):
 
     total_time = 0
 
+
     for epoch in range(args.epochs):
         start = time.time()
 
         learning_rate_G = set_lr(args, epoch, optimizer_G)
         learning_rate_D = set_lr(args, epoch, optimizer_D)
+        tot_loss_G=0
+        tot_loss_D=0
 
         for batch, (im_lr, im_hr) in enumerate(trainDataLoader):
             im_lr = Variable(im_lr.cuda())
@@ -165,8 +174,10 @@ def train(args):
 
             valid_hr = Variable(torch.ones_like(output_real), requires_grad=False)
             fake = Variable(torch.zeros_like(output_fake), requires_grad=False)
+            valid_lr = Variable(torch.ones_like(output_fake), requires_grad=False)
 
-            loss_G = criterion_G(output_fake, fake )
+            loss_G = criterion_G(output_fake, valid_lr)
+
             optimizer_G.zero_grad()
             loss_G.backward()
             optimizer_G.step()
@@ -177,7 +188,8 @@ def train(args):
 
 
             loss_D = criterion_D( output_fake.detach(), fake)+criterion_D(output_real, valid_hr)
-
+            tot_loss_G += loss_G
+            tot_loss_D += loss_D
 
             optimizer_D.zero_grad()
             loss_D.backward()
@@ -187,23 +199,22 @@ def train(args):
         epoch_time = (end - start)
         total_time = total_time + epoch_time
         print(epoch)
-        '''
+
+        lossD = tot_loss_D / (batch + 1)
+        lossG = tot_loss_G / (batch + 1)
+
+
+
+
         if (epoch + 1) % args.period == 0:
             netG.eval()
-            netD.eval()
             test(args, netG, testdataloader)
-            test(args, netD, testdataloader)
             netG.train()
-            log = "[{} / {}] \tLearning_rate: {:.5f}\t Generator Loss: {:.4f} \t Discriminator Loss: {:.4f} \t Time: {:.4f}".format(epoch + 1, args.epochs, learning_rate_G, loss_G, loss_D, total_time)
+            log = "[{} / {}] \tLearning_rate: {:.5f}\t Generator Loss: {:.4f} \t Discriminator Loss: {:.4f} \t Time: {:.4f}".format(epoch + 1, args.epochs, learning_rate_G, lossG, lossD, total_time)
             print(log)
             save.save_log(log)
             save.save_model(netG, epoch)
             total_time = 0
-        '''
-
-
-
-
     #writer.close()
 
 if __name__ == '__main__':
