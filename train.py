@@ -99,38 +99,9 @@ def test(save, netG, testdataloader, i_th_image, iters = 0):
 
 # training
 def train(args):
-    ################################# for gihoon's part start
-    netD = models.netD(input_channel = args.input_channel, mid_channel = args.mid_channel)
-    criterion_D = nn.BCELoss()
-    optimizer_D = torch.optim.Adam(netD.parameters(), lr=args.lr)
-    netD.train()
 
-    netG = models.netSR(input_channel = args.input_channel, mid_channel = args.mid_channel)
-    criterion_G = nn.BCELoss()
-    criterion_Recon = nn.L1Loss()
-    optimizer_G = torch.optim.Adam(netG.parameters(), lr=args.lr)
-    netG.train()
-
-    netD.apply(weights_init)
-    netG.apply(weights_init)
-    netD.cuda()
-    netG.cuda()
-
-    criterion_G.cuda()
-    criterion_D.cuda()
-    ##################################for gihoon's part end
-
-
-    # load data
-    ################################# for yujin's part start
-    #trainDataLoader, validDataLoader , testDataLoader = data_utils.Load_Data(args.datapath)
-    #trainDataLoader = New_trainDataset(args)
-    #testdataloader = New_testDataset(args)
-    ################################# for yujin's part end
 
     #writer = SummaryWriter()
-
-
 
     #learning_rate_G = set_lr(args, args.iter, optimizer_G)
     #learning_rate_D = set_lr(args, args.iter, optimizer_D)
@@ -140,6 +111,27 @@ def train(args):
 
     start = datetime.now()
     for i_th_image in range(len(os.listdir(args.GT_path))): # num of data
+        #model init per image
+        netD = models.netD(input_channel = args.input_channel, mid_channel = args.mid_channel)
+        criterion_D = nn.BCELoss()
+        optimizer_D = torch.optim.Adam(netD.parameters(), lr=args.lr)
+        netD.train()
+
+        netG = models.netSR(input_channel = args.input_channel, mid_channel = args.mid_channel)
+        criterion_G = nn.BCELoss()
+        criterion_Recon = nn.L1Loss()
+        optimizer_G = torch.optim.Adam(netG.parameters(), lr=args.lr)
+        netG.train()
+
+        netD.apply(weights_init)
+        netG.apply(weights_init)
+        netD.cuda()
+        netG.cuda()
+
+        criterion_G.cuda()
+        criterion_D.cuda()
+
+        #dataloader init per image
         trainDataLoader = New_trainDataset(args, i_th_image)
         testdataloader = New_testDataset(args, i_th_image)
         # load saveData class from utils module
