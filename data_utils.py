@@ -155,7 +155,8 @@ if __name__ == '__main__':
         print("img_gt_train.shape" ,img_gt_train.shape)
         print("img_lr_train.shape" ,img_lr_train.shape)
         print("img_gt_test.shape" ,img_gt_test.shape)
-        save_image(img_gt_train, r'C:\Users\VML\Documents\GitHub\AI604_Team19\datasets\Set5\temp'+'/SR_img_train.png')
-        save_image(img_gt_test, r'C:\Users\VML\Documents\GitHub\AI604_Team19\datasets\Set5\temp'+'/SR_img_test.png')
+        #the color might be unreal because of scaling
+        save_image(img_gt_train, './SR_img_train.png')
+        save_image(img_gt_test, './SR_img_test.png')
         break
     print("Done: check Dataloader")
