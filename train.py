@@ -124,8 +124,8 @@ def train(args):
     # load data
     ################################# for yujin's part start
     #trainDataLoader, validDataLoader , testDataLoader = data_utils.Load_Data(args.datapath)
-    trainDataLoader = New_trainDataset(args)
-    testdataloader = New_testDataset(args)
+    #trainDataLoader = New_trainDataset(args)
+    #testdataloader = New_testDataset(args)
     ################################# for yujin's part end
 
     #writer = SummaryWriter()
