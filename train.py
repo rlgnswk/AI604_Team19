@@ -23,7 +23,7 @@ from torch.nn import init
 import numpy as np
 from data_utils import Dataset, testDataset
 from PIL import Image
-
+import random
 parser = argparse.ArgumentParser()
 parser.add_argument('--name', type=str)
 parser.add_argument('--gpu', type=int)
@@ -125,6 +125,7 @@ def train(args):
 
     netG = models.netSR(input_channel = args.input_channel, mid_channel = args.mid_channel)
     criterion_G = nn.BCELoss()
+    criterion_G_L1=nn.L1Loss()
     optimizer_G = torch.optim.Adam(netG.parameters(), lr=args.lr)
 
     netD.apply(weights_init)
@@ -134,6 +135,7 @@ def train(args):
 
     criterion_G.cuda()
     criterion_D.cuda()
+    criterion_G_L1.cuda()
     ##################################for gihoon's part end
 
 
@@ -165,6 +167,8 @@ def train(args):
             im_lr = Variable(im_lr.cuda())
             im_lr=F.interpolate(im_lr, scale_factor=2, mode='bicubic')
             im_hr = Variable(im_hr.cuda())
+
+
             output_SR = netG(im_lr)
             output_real=netD(im_hr)
             output_fake=netD(output_SR)
@@ -176,7 +180,7 @@ def train(args):
             fake = Variable(torch.zeros_like(output_fake), requires_grad=False)
             valid_lr = Variable(torch.ones_like(output_fake), requires_grad=False)
 
-            loss_G = criterion_G(output_fake, valid_lr)
+            loss_G = criterion_G(output_fake, valid_lr)+criterion_G_L1(im_hr, output_SR)
 
             optimizer_G.zero_grad()
             loss_G.backward()
