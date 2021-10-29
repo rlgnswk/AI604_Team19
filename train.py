@@ -14,36 +14,41 @@ from torch.autograd import Variable
 import models
 
 from utils import *
-from data_utils import Dataset
 import argparse
 import time
+from datetime import datetime 
 import math
 from math import log10
 from torch.nn import init
 import numpy as np
-from data_utils import Dataset, testDataset
+from data_utils import New_trainDataset, New_testDataset
 from PIL import Image
+from torchvision.utils import save_image
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--name', type=str)
+
+parser.add_argument('--name', default='test', help='save result')
 parser.add_argument('--gpu', type=int)
-parser.add_argument('--datasetPath', type=str, default='./datasets')
-parser.add_argument('--datasettype', type=str, default='Set5')
+parser.add_argument('--saveDir', default='./results', help='datasave directory')
+
+#dataPath
+parser.add_argument('--GT_path', type=str, default=r'.\dataset\GT')
+parser.add_argument('--LR_path', type=str, default=r'.\dataset\LR')
 
 #model parameters
 parser.add_argument('--input_channel', type=int, default=3, help='netSR and netD input channel')
 parser.add_argument('--mid_channel', type=int, default=64, help='netSR middle channel')
-parser.add_argument('--nThreads', type=int, default=8, help='number of threads for data loading')
-parser.add_argument('--load', default='NetFinal', help='save result')
+parser.add_argument('--nThreads', type=int, default=0, help='number of threads for data loading')
+
 #training parameters
-parser.add_argument('--patchSize', type=int, default=128, help='patch size (GT)')
+parser.add_argument('--SR_ratio', type=int, default=2, help='SR ratio')
+parser.add_argument('--patchSize', type=int, default=256, help='patch size (GT)')
 parser.add_argument('--batchSize', type=int, default=16, help='input batch size for training')
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
 parser.add_argument('--lrDecay', type=int, default=100, help='epoch of half lr')
 parser.add_argument('--decayType', default='inv', help='lr decay function')
-parser.add_argument('--epochs', type=int, default=500, help='number of epochs to train')
-parser.add_argument('--period', type=int, default=10, help='period of evaluation')
-parser.add_argument('--saveDir', default='./result', help='datasave directory')
+parser.add_argument('--iter', type=int, default=2000, help='number of iterations to train')
+parser.add_argument('--period', type=int, default=100, help='period of evaluation')
 parser.add_argument('--kerneltype', default='g02', help='save result')
 args = parser.parse_args()
 
@@ -73,48 +78,24 @@ def set_lr(args, epoch, optimizer):
 # parameter counter
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
-#yj
-def get_dataset(args):
-    data_train=Dataset(args)
-    dataloader = torch.utils.data.DataLoader(data_train, batch_size=args.batchSize,
-                                             drop_last=True, shuffle=True, num_workers=int(args.nThreads), pin_memory=False)
-    return dataloader
-
-def get_testdataset(args):
-    data_test=testDataset(args)
-    dataloader = torch.utils.data.DataLoader(data_test, batch_size=args.batchSize,
-                                             drop_last=True, shuffle=True, num_workers=int(args.nThreads), pin_memory=False)
-    return dataloader
-
 
 #test
-def test(args, modelG, dataloader):
-    count=0
-    for batch, (im_lr, im_hr) in enumerate(dataloader):
-        count = count + 1
-        with torch.no_grad():
-            im_lr = Variable(im_lr.cuda(), volatile=False)
-            im_hr = Variable(im_hr.cuda())
-            output = modelG(im_lr)
-
-        # denormalizing the output
+def test(save, netG, testdataloader, i_th_image, iters = 0):
+    netG.eval()
+    with torch.no_grad():
+        test_image = testdataloader.getitem()
+        output = netG(test_image.cuda())
         output = output.cpu()
         output = output.data.squeeze(0)
         mean = [0.5, 0.5, 0.5]
         std = [0.5, 0.5, 0.5]
         for t, m, s in zip(output, mean, std):
             t.mul_(s).add_(m)
-        output = output.numpy()
-        output *= 255.0
-        output = output.clip(0, 255)
 
-        sp_0, sp_1, sp_2 = output.shape
-        output_rgb = np.zeros((sp_1,sp_2,sp_0))
-        output_rgb[:, :, 0] = output[2]
-        output_rgb[:, :, 1] = output[1]
-        output_rgb[:, :, 2] = output[0]
-        out = Image.fromarray(np.uint8(output_rgb), mode='RGB')
-        out.save('result/NetFinal/SR_img_%03d.png' % (count))
+        imagename = testdataloader.gt_path[i_th_image][:-4]
+        save_image(output, save.save_dir_image +"/"+imagename+str(iters)+'.png')
+    netG.train()
+
 
 # training
 def train(args):
@@ -122,10 +103,13 @@ def train(args):
     netD = models.netD(input_channel = args.input_channel, mid_channel = args.mid_channel)
     criterion_D = nn.BCELoss()
     optimizer_D = torch.optim.Adam(netD.parameters(), lr=args.lr)
+    netD.train()
 
     netG = models.netSR(input_channel = args.input_channel, mid_channel = args.mid_channel)
     criterion_G = nn.BCELoss()
+    criterion_Recon = nn.L1Loss()
     optimizer_G = torch.optim.Adam(netG.parameters(), lr=args.lr)
+    netG.train()
 
     netD.apply(weights_init)
     netG.apply(weights_init)
@@ -140,81 +124,101 @@ def train(args):
     # load data
     ################################# for yujin's part start
     #trainDataLoader, validDataLoader , testDataLoader = data_utils.Load_Data(args.datapath)
-    trainDataLoader = get_dataset(args)
-    testdataloader=get_testdataset(args)
+    trainDataLoader = New_trainDataset(args)
+    testdataloader = New_testDataset(args)
     ################################# for yujin's part end
 
-
-    writer = SummaryWriter()
-
-    # load saveData class from utils module
-    save = saveData(args)
-
-    total_time = 0
+    #writer = SummaryWriter()
 
 
-    for epoch in range(args.epochs):
-        start = time.time()
 
-        learning_rate_G = set_lr(args, epoch, optimizer_G)
-        learning_rate_D = set_lr(args, epoch, optimizer_D)
-        tot_loss_G=0
-        tot_loss_D=0
+    #learning_rate_G = set_lr(args, args.iter, optimizer_G)
+    #learning_rate_D = set_lr(args, args.iter, optimizer_D)
+    tot_loss_G=0
+    tot_loss_D=0
+    tot_loss_Recon=0
 
-        for batch, (im_lr, im_hr) in enumerate(trainDataLoader):
+    start = datetime.now()
+    for i_th_image in range(len(os.listdir(args.GT_path))): # num of data
+        trainDataLoader = New_trainDataset(args, i_th_image)
+        testdataloader = New_testDataset(args, i_th_image)
+        # load saveData class from utils module
+        imagename = testdataloader.gt_path[i_th_image][:-4]
+        save = saveData(args, imagename)
+
+        for iters in range(args.iter):
+            
+            im_lr, im_hr  = trainDataLoader.getitem()
             im_lr = Variable(im_lr.cuda())
-            im_lr=F.interpolate(im_lr, scale_factor=2, mode='bicubic')
             im_hr = Variable(im_hr.cuda())
-            output_SR = netG(im_lr)
-            output_real=netD(im_hr)
-            output_fake=netD(output_SR)
+            im_lr_up=F.interpolate(im_lr, scale_factor=args.SR_ratio, mode='bicubic', align_corners=True)
+            #print(im_lr.shape)
+            #print(im_lr.requires_grad) # true
+            #print(im_hr.requires_grad) # true
+
             # --------------------
             # Train Generator
             # --------------------
-
-            valid_hr = Variable(torch.ones_like(output_real), requires_grad=False)
-            fake = Variable(torch.zeros_like(output_fake), requires_grad=False)
-            valid_lr = Variable(torch.ones_like(output_fake), requires_grad=False)
-
-            loss_G = criterion_G(output_fake, valid_lr)
+            for p in netD.parameters():
+                p.requires_grad = False
 
             optimizer_G.zero_grad()
-            loss_G.backward()
+
+            output_SR = netG(im_lr_up)
+            output_fake=netD(output_SR)
+
+            true_labels = Variable(torch.ones_like(output_fake))
+            fake_labels = Variable(torch.zeros_like(output_fake))
+
+            loss_G = criterion_G(output_fake, true_labels) # GAN Loss
+            loss_Recon = criterion_Recon(output_SR, im_hr) # Reconstruction Loss
+
+            alpha = 1.0 # I(gihoon) think It should be bigger.
+            loss_G_total = loss_G + loss_Recon
+            #loss_G_total = loss_G
+            loss_G_total.backward()
             optimizer_G.step()
 
             # --------------------
             # Train Discriminator
             # --------------------
-
-
-            loss_D = criterion_D( output_fake.detach(), fake)+criterion_D(output_real, valid_hr)
-            tot_loss_G += loss_G
-            tot_loss_D += loss_D
-
+            for p in netD.parameters():
+                p.requires_grad = True
             optimizer_D.zero_grad()
-            loss_D.backward()
+
+            output_real=netD(im_hr.detach())
+            output_fake=netD(output_SR.detach())
+            
+            loss_D_fake = criterion_D(output_fake, fake_labels)
+            loss_D_real = criterion_D(output_real, true_labels)
+            loss_D_total = loss_D_fake/2  + loss_D_real/2
+
+            loss_D_total.backward()
             optimizer_D.step()
 
-        end = time.time()
-        epoch_time = (end - start)
-        total_time = total_time + epoch_time
-        print(epoch)
+            tot_loss_Recon += loss_Recon
+            tot_loss_G += loss_G
+            tot_loss_D += loss_D_total
 
-        lossD = tot_loss_D / (batch + 1)
-        lossG = tot_loss_G / (batch + 1)
+            if (iters + 1) % args.period == 0:
+                #test
+                test(save, netG, testdataloader, i_th_image, iters = iters)
+                #print
+                lossD = tot_loss_D / ((args.batchSize) * args.period)
+                lossGAN = tot_loss_G / ((args.batchSize) * args.period)
+                lossRecon = tot_loss_Recon / ((args.batchSize) * args.period)
+                end = datetime.now()
+                iter_time = (end - start)
+                #total_time = total_time + iter_time    
 
-
-
-
-        if (epoch + 1) % args.period == 0:
-            netG.eval()
-            test(args, netG, testdataloader)
-            netG.train()
-            log = "[{} / {}] \tLearning_rate: {:.5f}\t Generator Loss: {:.4f} \t Discriminator Loss: {:.4f} \t Time: {:.4f}".format(epoch + 1, args.epochs, learning_rate_G, lossG, lossD, total_time)
-            print(log)
-            save.save_log(log)
-            save.save_model(netG, epoch)
-            total_time = 0
+                log = "[{} / {}] \tReconstruction Loss: {:.5f}\t Generator Loss: {:.4f} \t Discriminator Loss: {:.4f} \t Time: {}".format(iters + 1, args.iter, lossRecon, lossGAN, lossD, iter_time)
+                print(log)
+                save.save_log(log)
+                save.save_model(netG, iters)
+                
+                tot_loss_Recon = 0
+                tot_loss_G = 0 
+                tot_loss_D = 0
     #writer.close()
 
 if __name__ == '__main__':

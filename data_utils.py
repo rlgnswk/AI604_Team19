@@ -8,6 +8,11 @@ import os.path
 from torch.autograd import Variable
 from PIL import Image
 
+from torchvision.utils import save_image
+import torchvision
+
+from PIL import Image as PIL_image
+
 def dataAug(imglr, imghr):
     if random.random() < 0.3:  # horizontal flip
         imglr = imglr[:, ::-1, :]
@@ -29,9 +34,6 @@ def dataAug(imglr, imghr):
 
     input_size_h, input_size_w, _ = imglr.shape
 
-
-
-
     x_start=random.randrange(0, input_size_w-crop_size_w)
     y_start = random.randint(0, input_size_h -crop_size_h)
     (x_gt, y_gt)=(2*x_start, 2*y_start)
@@ -40,29 +42,6 @@ def dataAug(imglr, imghr):
 
 
     return imglr, imghr
-
-
-def get_aug(data_dir):
-    data_lr=os.path.join(data_dir, "LR")
-    data_hr=os.path.join(data_dir, "ILR")
-    fileList1 = os.listdir(data_lr)
-    fileList2 = os.listdir(data_hr)
-    nTrain = len(fileList1)
-    train_images=[]
-    GT_images=[]
-    for i in range(1):
-        name = fileList1[1]
-        nameTrain = os.path.join(data_lr, name)
-        nameGT = os.path.join(data_hr, name)
-        imgTrain = cv2.imread(nameTrain)
-        imgGT=cv2.imread(nameGT)
-        for j in range(100):
-            train_aug, GT_aug = dataAug(imgTrain, imgGT)
-            train_images.append(train_aug)
-            GT_images.append(GT_aug)
-
-    return train_images, GT_images
-
 
 def RGB_np2Tensor(img_lr):
 
@@ -73,55 +52,110 @@ def RGB_np2Tensor(img_lr):
     img_lr = (img_lr / 255.0 - 0.5) * 2
     return img_lr
 
-
-class Dataset(torch.utils.data.dataset.Dataset):
-    def __init__(self, args):
+#it's not have to use Dataset library.
+class New_trainDataset():
+    def __init__(self, args, idx = 0):
         self.args=args
-        self.dirpath = args.datasetPath
-        self.datatype=args.datasettype
-        self.kerneltype=args.kerneltype
-        self.data_dir = os.path.join(self.dirpath, self.datatype, self.kerneltype)  # /datasets/Set5/g02
-        train_images, GT_images = get_aug(self.data_dir)
-        self.tr_im=train_images
-        self.gt_im=GT_images
+        self.GT_path = args.GT_path
+        self.LR_path = args.LR_path
+        self.gt_path = sorted(os.listdir(self.GT_path))
+        #self.length = len(self.gt_path)
 
-    def __len__(self):
+        self.batchSize = args.batchSize
+        self.crop_gt = args.patchSize
+        self.crop_lr = self.crop_gt // args.SR_ratio
+        self.input_channel_size = args.input_channel
+        
+        gt = PIL_image.open(self.GT_path +"\\"+ self.gt_path[idx]).convert('RGB')
+        lq = PIL_image.open(self.LR_path +"\\"+ self.gt_path[idx]).convert('RGB')        
+        self.gt_array = np.array(gt)
+        self.lq_array = np.array(lq)
 
-        length=len(self.tr_im)
-        return length
+    def getitem(self):
 
-    def __getitem__(self, idx):
-        args = self.args
-        img_lr = self.tr_im[idx]
-        img_gt=self.gt_im[idx]
+        img_gt_batch = torch.ones([self.batchSize, self.input_channel_size, self.crop_gt, self.crop_gt], dtype=torch.float32, requires_grad=True)
+        img_lr_batch = torch.ones([self.batchSize, self.input_channel_size, self.crop_lr, self.crop_lr], dtype=torch.float32, requires_grad=True)
+        
+        for i in range(self.batchSize):        
+            imglr, imghr  = dataAug(self.lq_array, self.gt_array)
+            img_gt_batch[i,:,:,:] = RGB_np2Tensor(imghr)
+            img_lr_batch[i,:,:,:] = RGB_np2Tensor(imglr)
+        #print(img_gt_batch.shape)
+        return img_lr_batch, img_gt_batch
 
-        img_lr=RGB_np2Tensor(img_lr)
-        img_gt = RGB_np2Tensor(img_gt)
-
-        return img_lr, img_gt
-
-class testDataset(torch.utils.data.dataset.Dataset):
-    def __init__(self, args):
+class New_testDataset():
+    def __init__(self, args, idx = 0):
         self.args=args
-        self.dirpath = args.datasetPath
-        self.datatype=args.datasettype
-        self.kerneltype=args.kerneltype
-        self.data_dir = os.path.join(self.dirpath, self.datatype, self.kerneltype, "ILR")  # /datasets/Set5/g02
-        self.fileList = os.listdir(self. data_dir)
-        self.imgTest=os.path.join(self.data_dir, self.fileList[1])
+        self.GT_path = args.GT_path
+        #self.LR_path = r'C:\Users\VML\Documents\GitHub\AI604_Team19\datasets\Set5\temp\LR'
+        self.gt_path = sorted(os.listdir(self.GT_path))
+         
+        self.batchSize = 1
+        self.input_channel_size = args.input_channel
+
+
+        gt = PIL_image.open(self.GT_path +"\\"+ self.gt_path[idx]).convert('RGB')
+     
+        self.gt_array = np.array(gt)
+
+
+    def getitem(self):
+
+        test_image = torch.ones([self.batchSize, self.gt_array.shape[2], self.gt_array.shape[0], self.gt_array.shape[1]], dtype=torch.float32, requires_grad=True)
+        
+        for i in range(self.batchSize):        
+            #imglr, imghr  = dataAug(self.lq_array, self.gt_array)
+            test_image[i,:,:,:] = RGB_np2Tensor(self.gt_array)
+
+        return test_image
 
 
 
-    def __len__(self):
+if __name__ == '__main__':
+    import argparse
+    print("Start: check Dataloader")
+    parser = argparse.ArgumentParser()
 
-        length=1
-        return length
+    parser.add_argument('--name', default='test', help='save result')
+    parser.add_argument('--gpu', type=int)
+    parser.add_argument('--saveDir', default='./results', help='datasave directory')
 
-    def __getitem__(self, idx):
-        args = self.args
-        self.img = cv2.imread(self.imgTest)
+    #dataPath
+    parser.add_argument('--GT_path', type=str, default=r'.\dataset\GT')
+    parser.add_argument('--LR_path', type=str, default=r'.\dataset\LR')
 
-        img_hr=RGB_np2Tensor(self.img)
+    #model parameters
+    parser.add_argument('--input_channel', type=int, default=3, help='netSR and netD input channel')
+    parser.add_argument('--mid_channel', type=int, default=64, help='netSR middle channel')
+    parser.add_argument('--nThreads', type=int, default=0, help='number of threads for data loading')
 
+    #training parameters
+    parser.add_argument('--SR_ratio', type=int, default=2, help='SR ratio')
+    parser.add_argument('--patchSize', type=int, default=256, help='patch size (GT)')
+    parser.add_argument('--batchSize', type=int, default=16, help='input batch size for training')
+    parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
+    parser.add_argument('--lrDecay', type=int, default=100, help='epoch of half lr')
+    parser.add_argument('--decayType', default='inv', help='lr decay function')
+    parser.add_argument('--iter', type=int, default=2000, help='number of iterations to train')
+    parser.add_argument('--period', type=int, default=100, help='period of evaluation')
+    parser.add_argument('--kerneltype', default='g02', help='save result')
+    args = parser.parse_args()
+    
 
-        return img_hr
+    data_train=New_trainDataset(args)
+    data_test=New_testDataset(args)              
+    #testdataloader = get_testdataset(args)
+    train_batch = 16
+    test_batch = 1
+
+    for iter in range(1):
+        img_lr_train, img_gt_train  = data_train.getitem()
+        img_gt_test  = data_test.getitem()
+        print( "train_batch: " ,train_batch, " test_batch: ",test_batch)
+        print("img_gt_train.shape" ,img_gt_train.shape)
+        print("img_lr_train.shape" ,img_lr_train.shape)
+        print("img_gt_test.shape" ,img_gt_test.shape)
+        save_image(img_gt_train, r'C:\Users\VML\Documents\GitHub\AI604_Team19\datasets\Set5\temp'+'/SR_img_train.png')
+        save_image(img_gt_test, r'C:\Users\VML\Documents\GitHub\AI604_Team19\datasets\Set5\temp'+'/SR_img_test.png')
+        break
+    print("Done: check Dataloader")
