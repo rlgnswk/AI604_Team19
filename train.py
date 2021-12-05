@@ -12,7 +12,7 @@ import torch.optim as optim
 from tensorboardX import SummaryWriter
 from torch.autograd import Variable
 import models
-
+import random
 from utils import *
 import argparse
 import time
@@ -21,11 +21,10 @@ import math
 from math import log10
 from torch.nn import init
 import numpy as np
-from data_utils import New_trainDataset, New_testDataset
 from PIL import Image
 from torchvision.utils import save_image
-from torch.utils.data import DataLoader
-
+from PIL import Image as PIL_image
+from data import *
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--name', default='test', help='save result')
@@ -84,11 +83,11 @@ def count_parameters(model):
 
 
 # test
-def test(save, netG, testdataloader, i_th_image, iters=0):
+def test(save, netG, lq, gt, img, iters=0):
     netG.eval()
     with torch.no_grad():
-        test_image = testdataloader.getitem()
-        output = netG(test_image.cuda())
+        input_img = F.interpolate(lq, scale_factor=2)
+        output = netG(input_img)
         output = output.cpu()
         output = output.data.squeeze(0)
         mean = [0.5, 0.5, 0.5]
@@ -96,10 +95,9 @@ def test(save, netG, testdataloader, i_th_image, iters=0):
         for t, m, s in zip(output, mean, std):
             t.mul_(s).add_(m)
 
-        imagename = testdataloader.gt_path[i_th_image][:-4]
+        imagename = img[:-4]
         save_image(output, save.save_dir_image + "/" + imagename + str(iters) + '.png')
     netG.train()
-
 
 # training
 def train(args):
@@ -112,7 +110,26 @@ def train(args):
     tot_loss_Recon = 0
 
     start = datetime.now()
-    for i_th_image in range(len(os.listdir(args.GT_path))):  # num of data
+    gt_path=sorted(os.listdir(args.GT_path))
+    length=len(gt_path)
+
+
+    for idx in range(length):  # num of data
+
+        gt_pi = PIL_image.open(args.GT_path + "/" + gt_path[idx]).convert('RGB')
+        lq_pi = PIL_image.open(args.LR_path + "/" + gt_path[idx]).convert('RGB')
+
+        gt = RGB_np2Tensor(np.array(gt_pi)).cuda()
+        lq = RGB_np2Tensor(np.array(lq_pi)).cuda()
+        gt=torch.unsqueeze(gt, dim=0)
+        lq=torch.unsqueeze(lq, dim=0)
+        hr_fathers1, lr_sons1 = dataAug(lq)
+        hr_fathers2, lr_sons2 = dataAug(lq)
+        hr_fathers3, lr_sons3 = dataAug(lq)
+        hr_fathers4, lr_sons4 = dataAug(lq)
+
+
+
         # model init per image
         netD = models.netD(input_channel=args.input_channel, mid_channel=args.mid_channel)
         criterion_D = nn.BCELoss()
@@ -132,33 +149,29 @@ def train(args):
 
         criterion_G.cuda()
         criterion_D.cuda()
-
-        # dataloader init per image
-        trainDataLoader = DataLoader(New_trainDataset(args, i_th_image))
-        testdataloader = New_testDataset(args, i_th_image)
-        # load saveData class from utils module
-        imagename = testdataloader.gt_path[i_th_image][:-4]
-        save = saveData(args, imagename)
+        save = saveData(args, gt_path[idx][:-4])
 
         for iters in range(args.iter):
+            for j in range(4):
+                if j==0:
+                    im_lr=Variable(lr_sons1)
+                    im_hr=Variable(hr_fathers1)
+                elif j==1:
+                    im_lr=Variable(lr_sons2)
+                    im_hr=Variable(hr_fathers2)
+                elif j==2:
+                    im_lr=Variable(lr_sons3)
+                    im_hr=Variable(hr_fathers3)
+                else:
+                    im_lr=Variable(lr_sons4)
+                    im_hr=Variable(hr_fathers4)
 
-            im_lr, im_hr = trainDataLoader.getitem()
-            im_lr = Variable(im_lr.cuda())
-            im_hr = Variable(im_hr.cuda())
-            im_lr_up = F.interpolate(im_lr, scale_factor=args.SR_ratio, mode='bicubic', align_corners=True)
-            # print(im_lr.shape)
-            # print(im_lr.requires_grad) # true
-            # print(im_hr.requires_grad) # true
-
-            # --------------------
-            # Train Generator
-            # --------------------
             for p in netD.parameters():
                 p.requires_grad = False
 
             optimizer_G.zero_grad()
-
-            output_SR = netG(im_lr_up)
+            input_img=F.interpolate(im_lr, scale_factor=2)
+            output_SR = netG(input_img)
             output_fake = netD(output_SR)
 
             true_labels = Variable(torch.ones_like(output_fake))
@@ -196,7 +209,7 @@ def train(args):
 
             if (iters + 1) % args.period == 0:
                 # test
-                test(save, netG, testdataloader, i_th_image, iters=iters)
+                test(save, netG, lq, gt, gt_path[idx],iters=iters)
                 # print
                 lossD = tot_loss_D / ((args.batchSize) * args.period)
                 lossGAN = tot_loss_G / ((args.batchSize) * args.period)
@@ -209,7 +222,7 @@ def train(args):
                     iters + 1, args.iter, lossRecon, lossGAN, lossD, iter_time)
                 print(log)
                 save.save_log(log)
-                save.save_model(netG, iters)
+                save.save_model(netG, iters, idx)
 
                 tot_loss_Recon = 0
                 tot_loss_G = 0
