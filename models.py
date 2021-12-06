@@ -5,7 +5,7 @@ import torch.nn.functional as F # various activation functions for model
 class Conv_block4NetD(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(Conv_block4NetD, self).__init__()
-        self.conv = nn.Conv2d(in_channels = in_channels, out_channels = out_channels, kernel_size = 4, padding= 1, stride = 2, bias = False)
+        self.conv = nn.Conv2d(in_channels = in_channels, out_channels = out_channels, kernel_size = 3, padding= 1, stride = 1, bias = False)
         self.conv_bn = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
@@ -51,11 +51,11 @@ class Conv_block4NetSR(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(Conv_block4NetSR, self).__init__()
         self.conv = nn.Conv2d(in_channels = in_channels, out_channels = out_channels, kernel_size = 3, padding= 1, stride = 1)
-        #self.conv_bn = nn.BatchNorm2d(out_channels)
+        self.conv_bn = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
         x = self.conv(x)
-        #x = self.conv_bn(x)
+        x = self.conv_bn(x)
         x = F.relu(x)
         return x
 
@@ -81,6 +81,7 @@ class netSR(nn.Module):
         x_In = x
 
         x = self.Conv_blockIn(x)
+        x1=x
         x = self.Conv_block1(x)
         x = self.Conv_block2(x)
         x = self.Conv_block3(x)
