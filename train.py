@@ -25,6 +25,7 @@ from PIL import Image
 from torchvision.utils import save_image
 from PIL import Image as PIL_image
 from data import *
+from test_metric import *
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--name', default='test', help='save result')
@@ -96,8 +97,12 @@ def test(save, netG, lq, gt, img, iters=0):
             t.mul_(s).add_(m)
 
         imagename = img[:-4]
+        psnr=get_psnr(output, gt)
+        ssim=get_ssim(output,gt)
         save_image(output, save.save_dir_image + "/" + imagename + str(iters) + '.png')
+              
     netG.train()
+    return psnr, ssim
 
 # training
 def train(args):
@@ -209,7 +214,7 @@ def train(args):
 
             if (iters + 1) % args.period == 0:
                 # test
-                test(save, netG, lq, gt, gt_path[idx],iters=iters)
+                psnr, ssim=test(save, netG, lq, gt, gt_path[idx],iters=iters)
                 # print
                 lossD = tot_loss_D / ((args.batchSize) * args.period)
                 lossGAN = tot_loss_G / ((args.batchSize) * args.period)
@@ -218,8 +223,8 @@ def train(args):
                 iter_time = (end - start)
                 # total_time = total_time + iter_time
 
-                log = "[{} / {}] \tReconstruction Loss: {:.5f}\t Generator Loss: {:.4f} \t Discriminator Loss: {:.4f} \t Time: {}".format(
-                    iters + 1, args.iter, lossRecon, lossGAN, lossD, iter_time)
+                log = "[{} / {}] \tReconstruction Loss: {:.5f}\t Generator Loss: {:.4f} \t Discriminator Loss: {:.4f} \t Time: {} \t PSNR: {:.4f} \t SSIM: {:.4f} ".format(
+                    iters + 1, args.iter, lossRecon, lossGAN, lossD, iter_time, psnr, ssim)
                 print(log)
                 save.save_log(log)
                 save.save_model(netG, iters, idx)
