@@ -43,7 +43,7 @@ parser.add_argument('--nThreads', type=int, default=0, help='number of threads f
 # training parameters
 parser.add_argument('--SR_ratio', type=int, default=2, help='SR ratio')
 parser.add_argument('--patchSize', type=int, default=256, help='patch size (GT)')
-parser.add_argument('--batchSize', type=int, default=16, help='input batch size for training')
+parser.add_argument('--batchSize', type=int, default=9, help='input batch size for training')
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
 parser.add_argument('--lrDecay', type=int, default=100, help='epoch of half lr')
 parser.add_argument('--decayType', default='inv', help='lr decay function')
@@ -52,8 +52,6 @@ parser.add_argument('--period', type=int, default=100, help='period of evaluatio
 parser.add_argument('--kerneltype', default='g02', help='save result')
 args = parser.parse_args()
 
-
-# xavier initialization
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv2d') != -1:
@@ -83,41 +81,25 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-# test
-def test(save, netG, lq, gt, img, iters=0):
-    netG.eval()
+def test(save, netG, lq, gt, img, iters):
     with torch.no_grad():
-        input_img = F.interpolate(lq, scale_factor=2)
-        output = netG(input_img)
-        output = output.cpu()
-        output = output.data.squeeze(0)
-        mean = [0.5, 0.5, 0.5]
-        std = [0.5, 0.5, 0.5]
-        for t, m, s in zip(output, mean, std):
-            t.mul_(s).add_(m)
+        input_img = F.interpolate(lq, scale_factor=2, mode='bicubic')
 
-        imagename = img[:-4]
-        psnr=get_psnr(output, gt)
-        ssim=get_ssim(output,gt)
-        save_image(output, save.save_dir_image + "/" + imagename + str(iters) + '.png')
-              
-    netG.train()
+        output = netG(input_img)
+        save_image(output, save.save_dir_image + "/out" + str(iters) + '.png')
+        psnr = get_psnr(output, gt)
+        ssim = get_ssim(output, gt)
+
     return psnr, ssim
 
-# training
 def train(args):
-    # writer = SummaryWriter()
-
-    # learning_rate_G = set_lr(args, args.iter, optimizer_G)
-    # learning_rate_D = set_lr(args, args.iter, optimizer_D)
     tot_loss_G = 0
     tot_loss_D = 0
     tot_loss_Recon = 0
 
     start = datetime.now()
-    gt_path=sorted(os.listdir(args.GT_path))
-    length=len(gt_path)
-
+    gt_path = sorted(os.listdir(args.GT_path))
+    length = len(gt_path)
 
     for idx in range(length):  # num of data
 
@@ -133,9 +115,6 @@ def train(args):
         hr_fathers3, lr_sons3 = dataAug(lq)
         hr_fathers4, lr_sons4 = dataAug(lq)
 
-
-
-        # model init per image
         netD = models.netD(input_channel=args.input_channel, mid_channel=args.mid_channel)
         criterion_D = nn.BCELoss()
         optimizer_D = torch.optim.Adam(netD.parameters(), lr=args.lr)
@@ -174,8 +153,9 @@ def train(args):
             for p in netD.parameters():
                 p.requires_grad = False
 
+
             optimizer_G.zero_grad()
-            input_img=F.interpolate(im_lr, scale_factor=2)
+            input_img = F.interpolate(im_lr, scale_factor=2, mode='bicubic')
             output_SR = netG(input_img)
             output_fake = netD(output_SR)
 
@@ -187,20 +167,15 @@ def train(args):
 
             alpha = 1.0  # I(gihoon) think It should be bigger.
             loss_G_total = loss_G + loss_Recon
-            # loss_G_total = loss_G
             loss_G_total.backward()
             optimizer_G.step()
 
-            # --------------------
-            # Train Discriminator
-            # --------------------
             for p in netD.parameters():
                 p.requires_grad = True
             optimizer_D.zero_grad()
 
             output_real = netD(im_hr)
             D_fake = output_fake.detach()
-
             loss_D_fake = criterion_D(D_fake, fake_labels)
             loss_D_real = criterion_D(output_real, true_labels)
             loss_D_total = loss_D_fake / 2 + loss_D_real / 2
@@ -214,7 +189,9 @@ def train(args):
 
             if (iters + 1) % args.period == 0:
                 # test
-                psnr, ssim=test(save, netG, lq, gt, gt_path[idx],iters=iters)
+
+                netG.eval()
+                psnr, ssim = test(save, netG, lq, gt, gt_path[idx], iters=iters)
                 # print
                 lossD = tot_loss_D / ((args.batchSize) * args.period)
                 lossGAN = tot_loss_G / ((args.batchSize) * args.period)
@@ -228,11 +205,10 @@ def train(args):
                 print(log)
                 save.save_log(log)
                 save.save_model(netG, iters, idx)
-
+                netG.train()
                 tot_loss_Recon = 0
                 tot_loss_G = 0
                 tot_loss_D = 0
-    # writer.close()
 
 
 if __name__ == '__main__':
