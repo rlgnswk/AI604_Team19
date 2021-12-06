@@ -2,13 +2,13 @@ import torch
 import random
 import torch.nn.functional as F
 
-def dataAug(lq):
+def dataAug(lq, args):
     a = lq.shape[2]
     b = lq.shape[3]
-    a_mod = random.randint(a - 16, a - 2)
-    b_mod = random.randint(b - 16, b - 2)
+    a_mod = random.randint(a - 10, a - 2)
+    b_mod = random.randint(b - 10, b - 2)
     img_hr=F.interpolate(lq, size=[a_mod,b_mod])
-    img_lr=F.interpolate(lq,  size=[a_mod//2,b_mod//2])
+    img_lr=F.interpolate(lq,  size=[a_mod//args.SR_ratio,b_mod//args.SR_ratio])
     img_lr, img_hr=crop(img_lr,img_hr, 128,64)
     lr_sons=img_lr
     hr_fathers=img_hr
