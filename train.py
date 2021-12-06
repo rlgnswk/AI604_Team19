@@ -1,15 +1,6 @@
 import torch
 import torch.nn as nn  #
-import torch.nn.functional as F  # various activation functions for model
-import torchvision  # You can load various Pretrained Model from this package
-import torchvision.datasets as vision_dsets
-import torchvision.transforms as T  # Transformation functions to manipulate images
-import torch.optim as optim  # various optimization functions for model
-from torch.autograd import Variable
-from torch.utils import data
-from torchvision.utils import save_image
-import torch.optim as optim
-from tensorboardX import SummaryWriter
+
 from torch.autograd import Variable
 import models
 import random
@@ -83,7 +74,7 @@ def count_parameters(model):
 
 def test(save, netG, lq, gt, img, iters):
     with torch.no_grad():
-        input_img = F.interpolate(lq, scale_factor=2, mode='bicubic')
+        input_img = F.interpolate(lq, scale_factor=args.SR_ratio, mode='bicubic')
 
         output = netG(input_img)
         save_image(output, save.save_dir_image + "/out" + str(iters) + '.png')
@@ -110,10 +101,10 @@ def train(args):
         lq = RGB_np2Tensor(np.array(lq_pi)).cuda()
         gt=torch.unsqueeze(gt, dim=0)
         lq=torch.unsqueeze(lq, dim=0)
-        hr_fathers1, lr_sons1 = dataAug(lq)
-        hr_fathers2, lr_sons2 = dataAug(lq)
-        hr_fathers3, lr_sons3 = dataAug(lq)
-        hr_fathers4, lr_sons4 = dataAug(lq)
+        hr_fathers1, lr_sons1 = dataAug(lq, args)
+        hr_fathers2, lr_sons2 = dataAug(lq,args)
+        hr_fathers3, lr_sons3 = dataAug(lq,args)
+        hr_fathers4, lr_sons4 = dataAug(lq,args)
 
         netD = models.netD(input_channel=args.input_channel, mid_channel=args.mid_channel)
         criterion_D = nn.BCELoss()
@@ -155,7 +146,7 @@ def train(args):
 
 
             optimizer_G.zero_grad()
-            input_img = F.interpolate(im_lr, scale_factor=2, mode='bicubic')
+            input_img = F.interpolate(im_lr, scale_factor=args.SR_ratio, mode='bicubic')
             output_SR = netG(input_img)
             output_fake = netD(output_SR)
 
