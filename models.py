@@ -5,13 +5,14 @@ import torch.nn.functional as F # various activation functions for model
 class Conv_block4NetD(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(Conv_block4NetD, self).__init__()
-        self.conv = nn.Conv2d(in_channels = in_channels, out_channels = out_channels, kernel_size = 3, padding= 1, stride = 1, bias = False)
+        self.conv = nn.Conv2d(in_channels = in_channels, out_channels = out_channels, kernel_size = 4, padding= 1, stride = 2, bias = False)
         self.conv_bn = nn.BatchNorm2d(out_channels)
+        self.leaky_relu = nn.LeakyReLU(0.2, inplace=True)
 
     def forward(self, x):
         x = self.conv(x)
         x = self.conv_bn(x)
-        x = F.leaky_relu(x, negative_slope = 0.2)
+        x = self.leaky_relu(x)
         return x
 
 # input size 128×128
@@ -23,11 +24,11 @@ class netD(nn.Module):
         
         self.Conv_blockIn = Conv_block4NetD(self.input_channel , self.mid_channel//2) #output size = self.mid_channel/2 x 64 x 64
         self.Conv_block1 = Conv_block4NetD(self.mid_channel // 2 , self.mid_channel) #output size = self.mid_channel x 32 x 32
-        #self.Conv_block2 = Conv_block4NetD(self.mid_channel * 1 , self.mid_channel * 2) #output size = self.mid_channel * 2 x 16 x 16
-        self.Conv_block3 = Conv_block4NetD(self.mid_channel * 1 , self.mid_channel * 4) #output size = self.mid_channel * 4 x 8 x 8
+        self.Conv_block2 = Conv_block4NetD(self.mid_channel * 1 , self.mid_channel * 2) #output size = self.mid_channel * 2 x 16 x 16
+        self.Conv_block3 = Conv_block4NetD(self.mid_channel * 2 , self.mid_channel * 4) #output size = self.mid_channel * 4 x 8 x 8
         self.Conv_block4 = Conv_block4NetD(self.mid_channel * 4 , self.mid_channel * 8) #output size = self.mid_channel * 8 x 4 x 4
         self.Conv_last = nn.Conv2d(self.mid_channel * 8, 1, 4, 1, 0, bias=False)
-        self.sigmoid_layer =  nn.Sigmoid()
+        self.sigmoid_layer = nn.Sigmoid()
 
     def forward(self, x):
 
@@ -35,7 +36,7 @@ class netD(nn.Module):
 
         x = self.Conv_block1(x)
 
-        #x = self.Conv_block2(x)
+        x = self.Conv_block2(x)
 
         x = self.Conv_block3(x)
 
@@ -44,6 +45,7 @@ class netD(nn.Module):
         x = self.Conv_last(x)
 
         x = self.sigmoid_layer(x)
+
         return x
 
 
@@ -51,11 +53,11 @@ class Conv_block4NetSR(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(Conv_block4NetSR, self).__init__()
         self.conv = nn.Conv2d(in_channels = in_channels, out_channels = out_channels, kernel_size = 3, padding= 1, stride = 1)
-        self.conv_bn = nn.BatchNorm2d(out_channels)
+        # self.conv_bn = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
         x = self.conv(x)
-        x = self.conv_bn(x)
+        # x = self.conv_bn(x)
         x = F.relu(x)
         return x
 
@@ -79,9 +81,7 @@ class netSR(nn.Module):
         
     def forward(self, x):
         x_In = x
-
         x = self.Conv_blockIn(x)
-        x1=x
         x = self.Conv_block1(x)
         x = self.Conv_block2(x)
         x = self.Conv_block3(x)
