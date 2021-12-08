@@ -3,12 +3,18 @@ import os.path
 import torch
 import sys
 
+
 class saveData():
-    def __init__(self, args):
+    def __init__(self, args, imageName):
         self.args = args
-        self.save_dir = os.path.join(args.saveDir, args.load)
+        self.save_dir = os.path.join(args.saveDir, args.name)
+        self.save_dir = os.path.join(self.save_dir, imageName)
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
+
+        self.save_dir_image = os.path.join(self.save_dir, 'test_image')
+        if not os.path.exists(self.save_dir_image):
+            os.makedirs(self.save_dir_image)
         self.save_dir_model = os.path.join(self.save_dir, 'model')
         if not os.path.exists(self.save_dir_model):
             os.makedirs(self.save_dir_model)
@@ -17,19 +23,19 @@ class saveData():
         else:
             self.logFile = open(self.save_dir + '/log.txt', 'w')
 
-    def save_model(self, model, epoch):
+    def save_model(self, model, epoch,idx):
         torch.save(
             model.state_dict(),
-            self.save_dir_model + '/model_latest.pt')
+            self.save_dir_model + '/model'+str(idx)+'_latest.pt')
         torch.save(
             model.state_dict(),
-            self.save_dir_model + '/model_' + str(epoch) + '.pt')
+            self.save_dir_model + '/model'+str(idx)+ str(epoch) + '.pt')
         torch.save(
             model,
-            self.save_dir_model + '/model_obj.pt')
+            self.save_dir_model + '/model'+str(idx)+'_obj.pt')
         torch.save(
             epoch,
-            self.save_dir_model + '/last_epoch.pt')
+            self.save_dir_model + '/'+str(idx)+'last_epoch.pt')
 
     def save_log(self, log):
         sys.stdout.flush()
