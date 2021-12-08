@@ -27,8 +27,9 @@ parser.add_argument('--saveDir', default='./results', help='datasave directory')
 parser.add_argument('--load', default='NetFinal', help='save result')
 
 # dataPath
-parser.add_argument('--GT_path', type=str, default='./datasets/GT')
-parser.add_argument('--LR_path', type=str, default='./datasets/LR')
+parser.add_argument('--datapath', type=str, default='/mnt/data002/yujin/ComputerVision/MyDataset_AI604')
+parser.add_argument('--dataset', type=str, default='MyUrban100x2')
+parser.add_argument('--kerneltype', default='Bicubic_LR', help='save result')
 # model parameters
 parser.add_argument('--input_channel', type=int, default=3, help='netSR and netD input channel')
 parser.add_argument('--mid_channel', type=int, default=64, help='netSR middle channel')
@@ -43,7 +44,6 @@ parser.add_argument('--lrDecay', type=int, default=100, help='epoch of half lr')
 parser.add_argument('--decayType', default='inv', help='lr decay function')
 parser.add_argument('--iter', type=int, default=2000, help='number of iterations to train')
 parser.add_argument('--period', type=int, default=100, help='period of evaluation')
-parser.add_argument('--kerneltype', default='g02', help='kernel type')
 args = parser.parse_args()
 
 def weights_init(m):
@@ -106,14 +106,15 @@ def train(args):
     tot_loss_G = 0
     tot_loss_D = 0
     tot_loss_Recon = 0
-
+    GT_path = os.path.join(args.datapath, args.dataset, 'HR')
+    LR_path = os.path.join(args.datapath, args.dataset, args.kerneltype)
     start = datetime.now()
-    gt_path = sorted(os.listdir(args.GT_path))
+    gt_path = sorted(os.listdir(GT_path))
     length = len(gt_path)
 
     for idx in range(length):  # num of data
-        gt_pi = PIL_image.open(args.GT_path + "/" + gt_path[idx]).convert('RGB')
-        lq_pi = PIL_image.open(args.LR_path + "/" + gt_path[idx]).convert('RGB')
+        gt_pi = PIL_image.open(GT_path + "/" + gt_path[idx]).convert('RGB')
+        lq_pi = PIL_image.open(LR_path + "/" + gt_path[idx]).convert('RGB')
 
         gt = RGB_np2Tensor(np.array(gt_pi)).cuda()
         lq = RGB_np2Tensor(np.array(lq_pi)).cuda()
@@ -127,7 +128,7 @@ def train(args):
 
         netD = models.netD(input_channel=args.input_channel, mid_channel=args.mid_channel)
         criterion_D = nn.BCELoss()
-        optimizer_D = torch.optim.Adam(netD.parameters(), lr=args.lr, betas=(0.5, 0.999))        
+        optimizer_D = torch.optim.Adam(netD.parameters(), lr=args.lr, betas=(0.5, 0.999))
 
         netG = models.netSR(input_channel=args.input_channel, mid_channel=args.mid_channel)
         criterion_G = nn.BCELoss()
@@ -145,7 +146,7 @@ def train(args):
         netD.train()
         netG.train()
 
-        save = saveData(args)
+        save = saveData(args, gt_path[idx])
 
         for iters in range(args.iter):
             netG_lr = set_lr(args, iters, optimizer_G)
@@ -183,7 +184,7 @@ def train(args):
                 D_fake = netD(fake_image)
                 fake_labels = Variable(torch.zeros_like(D_fake))
                 loss_D_fake = criterion_D(D_fake, fake_labels)
-                
+
                 # total D loss
                 loss_D_total = 0.5 * (loss_D_fake + loss_D_real)
                 loss_D_total.backward()
@@ -193,7 +194,7 @@ def train(args):
                 for p in netD.parameters():
                     p.requires_grad = False
                 netG.zero_grad()
-                
+
                 loss_Recon = criterion_Recon(output_SR, im_hr)          # Reconstruction Loss
                 loss_G = criterion_G(netD(output_SR), true_labels)      # GAN Loss
 
@@ -222,7 +223,7 @@ def train(args):
                     iters + 1, args.iter, lossRecon, lossGAN, lossD, psnr, ssim, lpips_score, iter_time)
                 print(log)
                 save.save_log(log)
-                save.save_model(netG, iters)
+                save.save_model(netG, iters, gt_path[idx])
                 tot_loss_Recon = 0
                 tot_loss_G = 0
                 tot_loss_D = 0
