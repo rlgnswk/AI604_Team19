@@ -6,8 +6,8 @@ from torchvision.utils import save_image
 def dataAug(lq, args):
     a = lq.shape[2]
     b = lq.shape[3]
-    a_mod = random.randint(a - 10, a - 2)
-    b_mod = random.randint(b - 10, b - 2)
+    a_mod = random.randint(129, a )
+    b_mod = random.randint(129, b )
     img_hr=F.interpolate(lq, size=[a_mod,b_mod])
     img_lr=F.interpolate(lq,  size=[a_mod//args.SR_ratio,b_mod//args.SR_ratio])
     img_lr, img_hr=crop(img_lr,img_hr, 128,64)
