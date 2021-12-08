@@ -27,7 +27,7 @@ parser.add_argument('--saveDir', default='./results', help='datasave directory')
 parser.add_argument('--load', default='NetFinal', help='save result')
 
 # dataPath
-parser.add_argument('--datapath', type=str, default='./dataset')
+parser.add_argument('--datapath', type=str, default='/mnt/data002/yujin/ComputerVision/MyDataset_AI604')
 parser.add_argument('--dataset', type=str, default='MyUrban100x2')
 parser.add_argument('--kerneltype', default='Bicubic_LR', help='save result')
 # model parameters
@@ -44,6 +44,7 @@ parser.add_argument('--lrDecay', type=int, default=100, help='epoch of half lr')
 parser.add_argument('--decayType', default='inv', help='lr decay function')
 parser.add_argument('--iter', type=int, default=2000, help='number of iterations to train')
 parser.add_argument('--period', type=int, default=100, help='period of evaluation')
+parser.add_argument('--numhr', type=int, default=10, help='period of evaluation')
 args = parser.parse_args()
 
 def weights_init(m):
@@ -112,6 +113,7 @@ def train(args):
     gt_path = sorted(os.listdir(GT_path))
     length = len(gt_path)
 
+
     for idx in range(length):  # num of data
         gt_pi = PIL_image.open(GT_path + "/" + gt_path[idx]).convert('RGB')
         lq_pi = PIL_image.open(LR_path + "/" + gt_path[idx]).convert('RGB')
@@ -120,11 +122,12 @@ def train(args):
         lq = RGB_np2Tensor(np.array(lq_pi)).cuda()
         gt = torch.unsqueeze(gt, dim=0)
         lq = torch.unsqueeze(lq, dim=0)
-
-        hr_fathers1, lr_sons1 = dataAug(lq, args)
-        hr_fathers2, lr_sons2 = dataAug(lq, args)
-        hr_fathers3, lr_sons3 = dataAug(lq, args)
-        hr_fathers4, lr_sons4 = dataAug(lq, args)
+        hr_fathers=[]
+        lr_sons=[]
+        for k in range(args.numhr):
+            father, sons=dataAug(lq, args)
+            hr_fathers.append(father)
+            lr_sons.append(sons)
 
         netD = models.netD(input_channel=args.input_channel, mid_channel=args.mid_channel)
         criterion_D = nn.BCELoss()
@@ -152,21 +155,9 @@ def train(args):
             netG_lr = set_lr(args, iters, optimizer_G)
             netD_lr = set_lr(args, iters, optimizer_D)
 
-            for j in range(4):
-                if j==0:
-                    im_lr=Variable(lr_sons1)
-                    im_hr=Variable(hr_fathers1)
-                elif j==1:
-                    im_lr=Variable(lr_sons2)
-                    im_hr=Variable(hr_fathers2)
-                elif j==2:
-                    im_lr=Variable(lr_sons3)
-                    im_hr=Variable(hr_fathers3)
-                else:
-                    im_lr=Variable(lr_sons4)
-                    im_hr=Variable(hr_fathers4)
+            for idx in range(args.numhr):
 
-                input_img = F.interpolate(im_lr, scale_factor=args.SR_ratio, mode='bicubic')
+                input_img = F.interpolate(lr_sons[idx], scale_factor=args.SR_ratio, mode='bicubic')
                 output_SR = netG(input_img)
 
                 # update D
@@ -175,7 +166,7 @@ def train(args):
                 netD.zero_grad()
 
                 # real image
-                output_real = netD(im_hr)
+                output_real = netD(hr_fathers[idx])
                 true_labels = Variable(torch.ones_like(output_real))
                 loss_D_real = criterion_D(output_real, true_labels)
 
@@ -195,7 +186,7 @@ def train(args):
                     p.requires_grad = False
                 netG.zero_grad()
 
-                loss_Recon = criterion_Recon(output_SR, im_hr)          # Reconstruction Loss
+                loss_Recon = criterion_Recon(output_SR, hr_fathers[idx])          # Reconstruction Loss
                 loss_G = criterion_G(netD(output_SR), true_labels)      # GAN Loss
 
                 alpha = 0.0001  # I(gihoon) think It should be bigger.
