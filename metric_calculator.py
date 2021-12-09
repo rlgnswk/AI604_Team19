@@ -72,5 +72,5 @@ def calculate_metirc(srpath ,gtpath):
 
 if __name__ == '__main__':
     gtpath = None
-	srpath = None
-	calculate_metirc(srpath ,gtpath)
+    srpath = None
+    calculate_metirc(srpath ,gtpath)
