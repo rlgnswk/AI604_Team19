@@ -33,7 +33,6 @@ parser.add_argument('--input_channel', type=int, default=3, help='netSR and netD
 parser.add_argument('--mid_channel', type=int, default=64, help='netSR middle channel')
 parser.add_argument('--nThreads', type=int, default=8, help='number of threads for data loading')
 parser.add_argument('--saveDir', default='./results', help='datasave directory')
-parser.add_argument('--gpu', type=int, default=4, help='gpu index')
 
 args = parser.parse_args()
 
