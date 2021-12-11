@@ -5,10 +5,6 @@ from torchvision.utils import save_image
 from math import floor
 import cv2
 
-class dummy():
-    def __init__(self, SR_ratio):
-        self.SR_ratio = SR_ratio
-
 def dataAug(lq, args):
     # generate aspect ratio between 128 and shorter side of image
     while True:

@@ -74,6 +74,10 @@ def count_parameters(model):
 
 def test(save, netG, lq, gt, img, idx, iters):
     netG.eval()
+
+    if not os.path.exists('result/test_output/'):
+        os.makedirs('result/test_output/')
+
     with torch.no_grad():
         input_img = F.interpolate(lq, scale_factor=args.SR_ratio, mode='bicubic')
         output = netG(input_img)
