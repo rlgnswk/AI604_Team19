@@ -37,6 +37,9 @@ def get_ssim(sr_image, ground_truth):
     ground_truth = to_numpy_array(ground_truth)
 
     # ssim computation
-    ssim_val = ssim(np.transpose(ground_truth.astype(int), (1,2,0)), np.transpose(sr_image.astype(int), (1,2,0)), multichannel=True)
+    ssim_val = ssim(np.transpose(ground_truth.astype(int), (1,2,0)),
+                    np.transpose(sr_image.astype(int), (1,2,0)),
+                    data_range=255.0,
+                    multichannel=True)
 
     return ssim_val

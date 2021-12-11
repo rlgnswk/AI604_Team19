@@ -7,7 +7,6 @@ import math
 from math import log10
 import numpy as np
 from PIL import Image
-from skimage.metrics import structural_similarity as ssim
 
 import models
 from data import *
@@ -67,13 +66,17 @@ def test(args):
 
         gt = cv2.imread(gt_file)
         sr = cv2.imread(sr_file)
-
-        ssim_val = ssim(gt, gt, multichannel=True)
-
         gt = RGB_np2Tensor(gt)
         sr = RGB_np2Tensor(sr)
+
         lpips_val = lpips(sr, gt, net_type='vgg').item()
-        psnr_val = get_psnr(sr, gt)  
+        psnr_val = get_psnr(sr, gt) # this function is modifying sr and gt so I'm loading the images again below (Samuel)
+
+        gt = cv2.imread(gt_file)
+        sr = cv2.imread(sr_file)
+        gt = RGB_np2Tensor(gt)
+        sr = RGB_np2Tensor(sr)
+        ssim_val = get_ssim(sr, gt)
 
         avg_psnr += psnr_val
         avg_ssim += ssim_val

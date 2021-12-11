@@ -14,7 +14,6 @@ import math
 from math import log10
 import numpy as np
 from PIL import Image
-from skimage.metrics import structural_similarity as ssim
 
 from utils import *
 import models
@@ -80,7 +79,7 @@ def set_lr(args, epoch, optimizer):
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-def test(save, netG, lq, gt, idx, iters, gt_file):
+def test(save, netG, lq, gt, idx, iters):
     save_dir = os.path.join(args.saveDir, 'test_output')
     if not os.path.exists(os.path.join(save_dir)):
         os.makedirs(save_dir)
@@ -92,9 +91,8 @@ def test(save, netG, lq, gt, idx, iters, gt_file):
         output = netG(input_img)
 
     psnr = get_psnr(output, gt)
+    ssim = get_ssim(output, gt)
     lpips_score = lpips(output, gt, net_type='vgg').item()
-
-    print("SSIM before saving image: {:.4f}".format(get_ssim(output, gt)))
 
     # saving image
     output = output.cpu()
@@ -114,13 +112,7 @@ def test(save, netG, lq, gt, idx, iters, gt_file):
     out = Image.fromarray(np.uint8(output_rgb), mode='RGB')
     out.save(save_dir + '/img_' + str(idx) + '_iter_' + str(iters) + '.png')
 
-    sr = cv2.imread(save_dir + '/img_' + str(idx) + '_iter_' + str(iters) + '.png')
-    gt = cv2.imread(gt_file)
-    ssim_val = ssim(sr, gt, multichannel=True)
-
-    print("SSIM after saving image and loading again: {:.4f}".format(ssim_val))
-
-    return psnr, ssim_val, lpips_score
+    return psnr, ssim, lpips_score
 
 def train(args):
     gt_path = os.path.join(args.data_dir, args.dataset, args.GT_path)
@@ -227,7 +219,7 @@ def train(args):
             if (iters + 1) % args.period == 0:
                 # test
                 netG.eval()
-                psnr, ssim_val, lpips_score = test(save, netG, lq, gt, idx, iters, gt_file)
+                psnr, ssim, lpips_score = test(save, netG, lq, gt, idx, iters)
                 netG.train()
                 
                 lossD = tot_loss_D / args.period
@@ -236,7 +228,7 @@ def train(args):
                 lossPerc = tot_loss_Perc / args.period
 
                 # print
-                log = "[{} / {}] \t Reconstruction Loss: {:.8f} \t Perceptual Loss: {:.8f} \t Generator Loss: {:.8f} \t Discriminator Loss: {:.8f} \t PSNR: {:.4f} \t SSIM: {:.4f} \t LPIPS: {:.4f}".format(iters + 1, args.iter, lossRecon, lossPerc, lossGAN, lossD, psnr, ssim_val, lpips_score)
+                log = "[{} / {}] \t Reconstruction Loss: {:.8f} \t Perceptual Loss: {:.8f} \t Generator Loss: {:.8f} \t Discriminator Loss: {:.8f} \t PSNR: {:.4f} \t SSIM: {:.4f} \t LPIPS: {:.4f}".format(iters + 1, args.iter, lossRecon, lossPerc, lossGAN, lossD, psnr, ssim, lpips_score)
                 print(log)
                 save.save_log(log)
                 save.save_model(netG, iters)
