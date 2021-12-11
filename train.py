@@ -44,6 +44,7 @@ parser.add_argument('--decayType', default='step', help='lr decay function')
 parser.add_argument('--iter', type=int, default=200, help='number of iterations to train')
 parser.add_argument('--period', type=int, default=100, help='period of evaluation')
 parser.add_argument('--kerneltype', default='g02', help='kernel type')
+
 args = parser.parse_args()
 
 def weights_init(m):
@@ -102,7 +103,7 @@ def test(save, netG, lq, gt, img, idx, iters):
     output_rgb[:, :, 1] = output[1]
     output_rgb[:, :, 2] = output[0]
     out = Image.fromarray(np.uint8(output_rgb), mode='RGB')
-    out.save(args.saveDir + "/img_" + str(idx) + '_iter_' + str(iters) + '.png')
+    out.save('result/test_output' + '/img_' + str(idx) + '_iter_' + str(iters) + '.png')
 
     return psnr, ssim, lpips_score
 
@@ -129,23 +130,14 @@ def train(args):
         gt = gt.unsqueeze(0)
         lq = lq.unsqueeze(0)
 
-        # hr_fathers1, lr_sons1 = dataAug(lq, args)
-        # hr_fathers2, lr_sons2 = dataAug(lq, args)
-        # hr_fathers3, lr_sons3 = dataAug(lq, args)
-        # hr_fathers4, lr_sons4 = dataAug(lq, args)
-        # hr_fathers5, lr_sons5 = dataAug(lq, args)
-
-        # hr_fathers = torch.cat([hr_fathers1, hr_fathers2, hr_fathers3, hr_fathers4, hr_fathers5], dim=0)
-        # lr_sons = torch.cat([lr_sons1, lr_sons2, lr_sons3, lr_sons4, lr_sons5], dim=0)
-
         netD = models.netD(input_channel=args.input_channel, mid_channel=args.mid_channel)
         criterion_D = nn.BCELoss()
         optimizer_D = torch.optim.Adam(netD.parameters(), lr=args.lr, betas=(0.5, 0.999))        
 
         netG = models.netSR(input_channel=args.input_channel, mid_channel=args.mid_channel)
         criterion_G = nn.BCELoss()
-        criterion_Recon = nn.L1Loss()
         optimizer_G = torch.optim.Adam(netG.parameters(), lr=args.lr, betas=(0.5, 0.999))
+        criterion_Recon = nn.L1Loss()
 
         vgg = models.VGG16(requires_grad=False).cuda()
         criterion_vgg = nn.L1Loss()
@@ -171,23 +163,6 @@ def train(args):
             im_lr = Variable(lr_sons)
             im_hr = Variable(hr_fathers)
 
-            # for j in range(5):
-            #     if j==0:
-            #         im_lr = Variable(lr_sons1)
-            #         im_hr = Variable(hr_fathers1)
-            #     elif j==1:
-            #         im_lr = Variable(lr_sons2)
-            #         im_hr = Variable(hr_fathers2)
-            #     elif j==2:
-            #         im_lr = Variable(lr_sons3)
-            #         im_hr = Variable(hr_fathers3)
-            #     elif j==3:
-            #         im_lr = Variable(lr_sons4)
-            #         im_hr = Variable(hr_fathers4)
-            #     else:
-            #         im_lr = Variable(lr_sons5)
-            #         im_hr = Variable(hr_fathers5)
-
             input_img = F.interpolate(im_lr, scale_factor=args.SR_ratio, mode='bicubic')
             output_SR = netG(input_img)
 
@@ -197,13 +172,13 @@ def train(args):
             netD.zero_grad()
 
             # real image
-            output_real = netD(input_img, im_hr)
+            output_real = netD(im_hr)
             true_labels = Variable(torch.ones_like(output_real))
             loss_D_real = criterion_D(output_real, true_labels)
 
             # fake image
             fake_image = output_SR.detach()
-            D_fake = netD(input_img, fake_image)
+            D_fake = netD(fake_image)
             fake_labels = Variable(torch.zeros_like(D_fake))
             loss_D_fake = criterion_D(D_fake, fake_labels)
             
@@ -217,9 +192,9 @@ def train(args):
                 p.requires_grad = False
             netG.zero_grad()
             
-            loss_Recon = criterion_Recon(output_SR, im_hr)                      # Reconstruction Loss
-            loss_Perc = criterion_vgg(vgg(output_SR), vgg(im_hr))               # Perceptual Loss
-            loss_G = criterion_G(netD(input_img, output_SR), true_labels)       # GAN Loss
+            loss_Recon = criterion_Recon(output_SR, im_hr)           # Reconstruction Loss
+            loss_Perc = criterion_vgg(vgg(output_SR), vgg(im_hr))    # Perceptual Loss
+            loss_G = criterion_G(netD(output_SR), true_labels)       # GAN Loss
 
             alpha = 0.1  # I(gihoon) think It should be bigger.
             loss_G_total = loss_Recon + alpha * loss_G + 0.1 * loss_Perc
@@ -234,9 +209,6 @@ def train(args):
             if (iters + 1) % args.period == 0:
                 # test
                 psnr, ssim, lpips_score = test(save, netG, lq, gt, gt_path[idx], idx, iters)
-                ave_psnr += psnr
-                ave_ssim += ssim
-                ave_lpips_score += lpips_score
                 netG.train()
                 # print
                 lossD = tot_loss_D / ((args.batchSize) * args.period)
@@ -255,11 +227,6 @@ def train(args):
                 tot_loss_G = 0
                 tot_loss_D = 0
                 tot_loss_Perc = 0
-
-    print()
-    print("Average PSNR: {:.4f}".format(ave_psnr/length))
-    print("Average SSIM: {:.4f}".format(ave_ssim/length))
-    print("Average LPIPS: {:.4f}".format(ave_lpips_score/length))
 
 if __name__ == '__main__':
     train(args)
