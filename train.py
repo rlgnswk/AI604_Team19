@@ -1,23 +1,27 @@
 import torch
-import torch.nn as nn  #
-
+import torch.nn as nn
+from torch.nn import init
 from torch.autograd import Variable
-import models
+from torchvision.utils import save_image
+
+import os
+import argparse
 import random
 import cv2
-from utils import *
-import argparse
 import time
 from datetime import datetime
 import math
 from math import log10
-from torch.nn import init
 import numpy as np
 from PIL import Image
-from torchvision.utils import save_image
+from skimage.metrics import structural_similarity as ssim
+
+from utils import *
+import models
 from data import *
 from metric import *
 from lpips import lpips
+
 
 parser = argparse.ArgumentParser()
 
@@ -27,8 +31,11 @@ parser.add_argument('--saveDir', default='./results', help='datasave directory')
 parser.add_argument('--load', default='NetFinal', help='save result')
 
 # dataPath
-parser.add_argument('--GT_path', type=str, default='./datasets/GT')
-parser.add_argument('--LR_path', type=str, default='./datasets/LR')
+parser.add_argument('--data_dir', type=str, default='./MyDataset_AI604')
+parser.add_argument('--dataset', type=str, default='MySet5x2')
+parser.add_argument('--GT_path', type=str, default='HR')
+parser.add_argument('--LR_path', type=str, default='g20_non_ideal_LR')
+
 # model parameters
 parser.add_argument('--input_channel', type=int, default=3, help='netSR and netD input channel')
 parser.add_argument('--mid_channel', type=int, default=64, help='netSR middle channel')
@@ -73,19 +80,21 @@ def set_lr(args, epoch, optimizer):
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-def test(save, netG, lq, gt, img, idx, iters):
-    netG.eval()
-
-    if not os.path.exists('result/test_output/'):
-        os.makedirs('result/test_output/')
+def test(save, netG, lq, gt, idx, iters, gt_file):
+    save_dir = os.path.join(args.saveDir, 'test_output')
+    if not os.path.exists(os.path.join(save_dir)):
+        os.makedirs(save_dir)
 
     with torch.no_grad():
+        lq = Variable(lq.cuda(), volatile=False)
+        gt = Variable(gt.cuda())
         input_img = F.interpolate(lq, scale_factor=args.SR_ratio, mode='bicubic')
         output = netG(input_img)
 
     psnr = get_psnr(output, gt)
-    ssim = get_ssim(output, gt)
     lpips_score = lpips(output, gt, net_type='vgg').item()
+
+    print("SSIM before saving image: {:.4f}".format(get_ssim(output, gt)))
 
     # saving image
     output = output.cpu()
@@ -103,40 +112,49 @@ def test(save, netG, lq, gt, img, idx, iters):
     output_rgb[:, :, 1] = output[1]
     output_rgb[:, :, 2] = output[0]
     out = Image.fromarray(np.uint8(output_rgb), mode='RGB')
-    out.save('result/test_output' + '/img_' + str(idx) + '_iter_' + str(iters) + '.png')
+    out.save(save_dir + '/img_' + str(idx) + '_iter_' + str(iters) + '.png')
 
-    return psnr, ssim, lpips_score
+    sr = cv2.imread(save_dir + '/img_' + str(idx) + '_iter_' + str(iters) + '.png')
+    gt = cv2.imread(gt_file)
+    ssim_val = ssim(sr, gt, multichannel=True)
+
+    print("SSIM after saving image and loading again: {:.4f}".format(ssim_val))
+
+    return psnr, ssim_val, lpips_score
 
 def train(args):
+    gt_path = os.path.join(args.data_dir, args.dataset, args.GT_path)
+    lr_path = os.path.join(args.data_dir, args.dataset, args.LR_path)
+
+    gt_filelist = sorted([os.path.join(gt_path, img) for img in os.listdir(gt_path)])
+    lr_filelist = sorted([os.path.join(lr_path, img) for img in os.listdir(lr_path)])
+
     tot_loss_G = 0
     tot_loss_D = 0
     tot_loss_Recon = 0
     tot_loss_Perc = 0
+    idx = 0
 
-    start = datetime.now()
-    gt_path = sorted(os.listdir(args.GT_path))
-    length = len(gt_path)
+    for gt_file, lr_file in zip(gt_filelist, lr_filelist):
+        idx += 1
+        print('Image {}:'.format(idx))
 
-    ave_psnr = 0
-    ave_ssim = 0
-    ave_lpips_score = 0
-
-    for idx in range(length):  # num of data
-        gt_pi = cv2.imread(args.GT_path + "/" + gt_path[idx])
-        lq_pi = cv2.imread(args.LR_path + "/" + gt_path[idx])
+        gt_pi = cv2.imread(gt_file)
+        lq_pi = cv2.imread(lr_file)
 
         gt = RGB_np2Tensor(gt_pi).cuda()
         lq = RGB_np2Tensor(lq_pi).cuda()
+
         gt = gt.unsqueeze(0)
         lq = lq.unsqueeze(0)
 
         netD = models.netD(input_channel=args.input_channel, mid_channel=args.mid_channel)
-        criterion_D = nn.BCELoss()
-        optimizer_D = torch.optim.Adam(netD.parameters(), lr=args.lr, betas=(0.5, 0.999))        
+        optimizer_D = torch.optim.Adam(netD.parameters(), lr=args.lr, betas=(0.5, 0.999))
+        criterion_D = nn.BCELoss()       
 
         netG = models.netSR(input_channel=args.input_channel, mid_channel=args.mid_channel)
-        criterion_G = nn.BCELoss()
         optimizer_G = torch.optim.Adam(netG.parameters(), lr=args.lr, betas=(0.5, 0.999))
+        criterion_G = nn.BCELoss()
         criterion_Recon = nn.L1Loss()
 
         vgg = models.VGG16(requires_grad=False).cuda()
@@ -156,8 +174,8 @@ def train(args):
         save = saveData(args)
 
         for iters in range(args.iter):
-            netG_lr = set_lr(args, iters, optimizer_G)
-            netD_lr = set_lr(args, iters, optimizer_D)
+            # netG_lr = set_lr(args, iters, optimizer_G)
+            # netD_lr = set_lr(args, iters, optimizer_D)
 
             hr_fathers, lr_sons = dataAug(lq, args)
             im_lr = Variable(lr_sons)
@@ -196,8 +214,8 @@ def train(args):
             loss_Perc = criterion_vgg(vgg(output_SR), vgg(im_hr))    # Perceptual Loss
             loss_G = criterion_G(netD(output_SR), true_labels)       # GAN Loss
 
-            alpha = 0.1  # I(gihoon) think It should be bigger.
-            loss_G_total = loss_Recon + alpha * loss_G + 0.1 * loss_Perc
+            alpha = 0.01  # I(gihoon) think It should be bigger.
+            loss_G_total = loss_Recon + alpha * loss_G + alpha * loss_Perc
             loss_G_total.backward()
             optimizer_G.step()
 
@@ -208,21 +226,21 @@ def train(args):
 
             if (iters + 1) % args.period == 0:
                 # test
-                psnr, ssim, lpips_score = test(save, netG, lq, gt, gt_path[idx], idx, iters)
+                netG.eval()
+                psnr, ssim_val, lpips_score = test(save, netG, lq, gt, idx, iters, gt_file)
                 netG.train()
+                
+                lossD = tot_loss_D / args.period
+                lossGAN = tot_loss_G / args.period
+                lossRecon = tot_loss_Recon / args.period
+                lossPerc = tot_loss_Perc / args.period
+
                 # print
-                lossD = tot_loss_D / ((args.batchSize) * args.period)
-                lossGAN = tot_loss_G / ((args.batchSize) * args.period)
-                lossRecon = tot_loss_Recon / ((args.batchSize) * args.period)
-                lossPerc = tot_loss_Perc / ((args.batchSize) * args.period)
-                end = datetime.now()
-                iter_time = (end - start)
-                # total_time = total_time + iter_time
-                log = "[{} / {}] \t Reconstruction Loss: {:.8f} \t Perceptual Loss: {:.8f} \t Generator Loss: {:.8f} \t Discriminator Loss: {:.8f} \t PSNR: {:.4f} \t SSIM: {:.4f} \t LPIPS: {:.4f} \t Time: {}".format(
-                    iters + 1, args.iter, lossRecon, lossPerc, lossGAN, lossD, psnr, ssim, lpips_score, iter_time)
+                log = "[{} / {}] \t Reconstruction Loss: {:.8f} \t Perceptual Loss: {:.8f} \t Generator Loss: {:.8f} \t Discriminator Loss: {:.8f} \t PSNR: {:.4f} \t SSIM: {:.4f} \t LPIPS: {:.4f}".format(iters + 1, args.iter, lossRecon, lossPerc, lossGAN, lossD, psnr, ssim_val, lpips_score)
                 print(log)
                 save.save_log(log)
                 save.save_model(netG, iters)
+
                 tot_loss_Recon = 0
                 tot_loss_G = 0
                 tot_loss_D = 0

@@ -1,39 +1,39 @@
-import models
+import torch
+from torch.nn import init
+from torch.autograd import Variable
 
-from utils import *
-from torchvision.utils import save_image
 import argparse
-import time
 import math
 from math import log10
-from torch.nn import init
 import numpy as np
-from PIL import Image as PIL_image
-from data import *
-from test_metric import *
+from PIL import Image
 from skimage.metrics import structural_similarity as ssim
+
+import models
+from data import *
+from lpips import lpips
+from utils import *
+from metric import *
 
 parser = argparse.ArgumentParser(description='ZSSR-GAN')
 
 # validation data
 parser.add_argument('--name', default='test', help='save result')
-parser.add_argument('--GT_path', type=str, default='./datasets/GT')
-parser.add_argument('--LR_path', type=str, default='./datasets/LR')
-parser.add_argument('--datasetPath', type=str, default='./datasets')
-parser.add_argument('--datasettype', type=str, default='Set5')
-parser.add_argument('--kerneltype', default='g02', help='save result')
+parser.add_argument('--data_dir', type=str, default='./MyDataset_AI604')
+parser.add_argument('--dataset', type=str, default='MySet5x2')
+parser.add_argument('--GT_path', type=str, default='HR')
+parser.add_argument('--LR_path', type=str, default='g20_non_ideal_LR')
+
 parser.add_argument('--valBatchSize', type=int, default=1)
-parser.add_argument('--pretrained_model', default='./results/test/baby/model/model0_latest.pt', help='save result')
-parser.add_argument('--nDenseBlock', type=int, default=3, help='number of DenseBlock')
-parser.add_argument('--nRRDB', type=int, default=3, help='number of RRDB')
+parser.add_argument('--pretrained_model', default='./results/NetFinal/model/model_latest.pt', help='save result')
+parser.add_argument('--SR_ratio', type=int, default=2, help='SR ratio')
 parser.add_argument('--nFeat', type=int, default=64, help='number of feature maps')
 parser.add_argument('--nChannel', type=int, default=3, help='number of color channels to use')
-parser.add_argument('--patchSize', type=int, default=512, help='patch size') # entire size for test
+parser.add_argument('--patchSize', type=int, default=64, help='patch size')
 parser.add_argument('--input_channel', type=int, default=3, help='netSR and netD input channel')
 parser.add_argument('--mid_channel', type=int, default=64, help='netSR middle channel')
 parser.add_argument('--nThreads', type=int, default=8, help='number of threads for data loading')
 parser.add_argument('--saveDir', default='./results', help='datasave directory')
-parser.add_argument('--scale', type=float, default=2, help='scale output size /input size')
 parser.add_argument('--gpu', type=int, default=4, help='gpu index')
 
 args = parser.parse_args()
@@ -50,35 +50,41 @@ def weights_init(m):
     if classname.find('Conv2d') != -1:
         init.xavier_normal_(m.weight.data)
 
-
 def test(args):
-    my_model = models.netSR(input_channel=args.input_channel, mid_channel=args.mid_channel)
-    my_model.apply(weights_init)
-    my_model.cuda()
+    gt_path = os.path.join(args.data_dir, args.dataset, args.GT_path)
+    sr_path = './results/test_output'
 
-    my_model.load_state_dict(torch.load(args.pretrained_model))
-    my_model.eval()
-    gt_path = sorted(os.listdir(args.GT_path))
-    length = len(gt_path)
-    gt_pi = PIL_image.open(args.GT_path + "/" + gt_path[0]).convert('RGB')
-    lq_pi = PIL_image.open(args.LR_path + "/" + gt_path[0]).convert('RGB')
+    gt_filelist = sorted([os.path.join(gt_path, img) for img in os.listdir(gt_path)])
+    sr_filelist = sorted([os.path.join(sr_path, img) for img in os.listdir(sr_path)])
 
-    gt = RGB_np2Tensor(np.array(gt_pi)).cuda()
-    lq = RGB_np2Tensor(np.array(lq_pi)).cuda()
-    gt = torch.unsqueeze(gt, dim=0)
-    lq = torch.unsqueeze(lq, dim=0)
-    save = saveData(args, gt_path[0][:-4])
     avg_psnr = 0
     avg_ssim = 0
+    avg_lpips = 0
     count = 0
-    with torch.no_grad():
-        input_img = F.interpolate(lq, scale_factor=2)
-        #save_image(input_img, save.save_dir_image + "/" +  str(iters) + '.png')
-        output= my_model(input_img)
-        save_image(output, save.save_dir_image + "/out"  + '.png')
 
+    for gt_file, sr_file in zip(gt_filelist, sr_filelist):
+        count += 1
 
+        gt = cv2.imread(gt_file)
+        sr = cv2.imread(sr_file)
 
+        ssim_val = ssim(gt, gt, multichannel=True)
+
+        gt = RGB_np2Tensor(gt)
+        sr = RGB_np2Tensor(sr)
+        lpips_val = lpips(sr, gt, net_type='vgg').item()
+        psnr_val = get_psnr(sr, gt)  
+
+        avg_psnr += psnr_val
+        avg_ssim += ssim_val
+        avg_lpips += lpips_val
+
+        print('Image {} \t PSNR: {:.4f} \t SSIM: {:.4f} \t LPIPS: {:.4f}'.format(count, psnr_val, ssim_val, lpips_val))
+
+    print()
+    print('Average PSNR: {:.4f}'.format(avg_psnr/count))
+    print('Average SSIM: {:.4f}'.format(avg_ssim/count))
+    print('Average LPIPS: {:.4f}'.format(avg_lpips/count))
 
 if __name__ == '__main__':
     test(args)
