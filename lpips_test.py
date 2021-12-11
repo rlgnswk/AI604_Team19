@@ -1,6 +1,7 @@
 import torch
 import cv2
-from lpips import lpips
+from lpips.__init__ import lpips
+
 
 def RGB_np2Tensor(img_input):
 	# to tensor
@@ -15,8 +16,8 @@ def RGB_np2Tensor(img_input):
 x = cv2.imread('lpips_test_images/baby.png')
 y = cv2.imread('lpips_test_images/SR_img_baby.png')
 
-x = RGB_np2Tensor(x)
-y = RGB_np2Tensor(y)
+x = RGB_np2Tensor(x).cuda()
+y = RGB_np2Tensor(y).cuda()
 
 # Identical Images
 loss_alex = lpips(x, x, net_type='alex', version='0.1')

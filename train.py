@@ -18,17 +18,17 @@ from PIL import Image as PIL_image
 from data import *
 from metric import *
 from lpips import lpips
-
+from vgg import Vgg16
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--name', default='test', help='save result')
 parser.add_argument('--gpu', type=int)
-parser.add_argument('--saveDir', default='./results', help='datasave directory')
+parser.add_argument('--saveDir', default='mnt/data002/yujin/ComputerVision/BSD/results', help='datasave directory')
 parser.add_argument('--load', default='NetFinal', help='save result')
 
 # dataPath
-parser.add_argument('--datapath', type=str, default='./datasets')
-parser.add_argument('--dataset', type=str, default='MyUrban100x2')
+parser.add_argument('--datapath', type=str, default='/mnt/data002/yujin/ComputerVision/MyDataset_AI604')
+parser.add_argument('--dataset', type=str, default='MyBSD100x2')
 parser.add_argument('--kerneltype', default='Bicubic_LR', help='save result')
 # model parameters
 parser.add_argument('--input_channel', type=int, default=3, help='netSR and netD input channel')
@@ -42,9 +42,9 @@ parser.add_argument('--batchSize', type=int, default=9, help='input batch size f
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
 parser.add_argument('--lrDecay', type=int, default=100, help='epoch of half lr')
 parser.add_argument('--decayType', default='inv', help='lr decay function')
-parser.add_argument('--iter', type=int, default=2000, help='number of iterations to train')
-parser.add_argument('--period', type=int, default=100, help='period of evaluation')
-parser.add_argument('--numhr', type=int, default=10, help='period of evaluation')
+parser.add_argument('--iter', type=int, default=200, help='number of iterations to train')
+parser.add_argument('--period', type=int, default=10, help='period of evaluation')
+parser.add_argument('--numhr', type=int, default=30, help='period of evaluation')
 args = parser.parse_args()
 
 def weights_init(m):
@@ -76,8 +76,8 @@ def count_parameters(model):
 def test(save, netG, lq, gt, img, iters):
     netG.eval()
     with torch.no_grad():
-        input_img = F.interpolate(lq, scale_factor=args.SR_ratio, mode='bicubic')
-        output = netG(input_img)
+        #input_img = F.interpolate(lq, scale_factor=args.SR_ratio)
+        output = netG(lq)
 
     psnr = get_psnr(output, gt)
     ssim = get_ssim(output, gt)
@@ -112,8 +112,11 @@ def train(args):
     start = datetime.now()
     gt_path = sorted(os.listdir(GT_path))
     length = len(gt_path)
-
-
+    tot_psnr=0
+    tot_ssim=0
+    tot_lpips=0
+    vgg = Vgg16(requires_grad=False)
+    vgg.cuda()
     for idx in range(length):  # num of data
         gt_pi = PIL_image.open(GT_path + "/" + gt_path[idx]).convert('RGB')
         lq_pi = PIL_image.open(LR_path + "/" + gt_path[idx]).convert('RGB')
@@ -136,6 +139,7 @@ def train(args):
         netG = models.netSR(input_channel=args.input_channel, mid_channel=args.mid_channel)
         criterion_G = nn.BCELoss()
         criterion_Recon = nn.L1Loss()
+        criterion_mse = nn.MSELoss().cuda()
         optimizer_G = torch.optim.Adam(netG.parameters(), lr=args.lr, betas=(0.5, 0.999))
 
         netD.apply(weights_init)
@@ -157,8 +161,8 @@ def train(args):
 
             for idx in range(args.numhr):
 
-                input_img = F.interpolate(lr_sons[idx], scale_factor=args.SR_ratio, mode='bicubic')
-                output_SR = netG(input_img)
+                #input_img = F.interpolate(, scale_factor=args.SR_ratio)
+                output_SR = netG(lr_sons[idx])
 
                 # update D
                 for p in netD.parameters():
@@ -187,11 +191,14 @@ def train(args):
                 netG.zero_grad()
 
                 loss_Recon = criterion_Recon(output_SR, hr_fathers[idx])          # Reconstruction Loss
-                loss_G = criterion_G(netD(output_SR), true_labels)      # GAN Loss
+                loss_Recon.backward(retain_graph=True)
+                alpha = 0.01 # I(gihoon) think It should be bigger.
+                loss_G =alpha * criterion_G(netD(output_SR), true_labels)      # GAN Loss
+                loss_G.backward(retain_graph=True)
+                gen_per = 0.5 * criterion_mse(vgg(output_SR), vgg(hr_fathers[idx]))
+                gen_per.backward()
+                loss_G_total = loss_Recon + loss_G
 
-                alpha = 0.0001  # I(gihoon) think It should be bigger.
-                loss_G_total = loss_Recon + alpha * loss_G
-                loss_G_total.backward()
                 optimizer_G.step()
 
                 tot_loss_Recon += loss_Recon
@@ -218,6 +225,14 @@ def train(args):
                 tot_loss_Recon = 0
                 tot_loss_G = 0
                 tot_loss_D = 0
+
+        tot_psnr+=psnr
+        tot_ssim+=ssim
+        tot_lpips+=lpips_score
+
+    print("Avg Psnr: "+str(tot_psnr/length))
+    print("Avg ssim: " + str(tot_ssim / length))
+    print("Avg lpips: " + str(tot_lpips / length))
 
 
 if __name__ == '__main__':
