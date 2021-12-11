@@ -23,11 +23,11 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument('--name', default='test', help='save result')
 parser.add_argument('--gpu', type=int)
-parser.add_argument('--saveDir', default='mnt/data002/yujin/ComputerVision/BSD/results', help='datasave directory')
+parser.add_argument('--saveDir', default='.results', help='datasave directory')
 parser.add_argument('--load', default='NetFinal', help='save result')
 
 # dataPath
-parser.add_argument('--datapath', type=str, default='/mnt/data002/yujin/ComputerVision/MyDataset_AI604')
+parser.add_argument('--datapath', type=str, default='./MyDataset_AI604')
 parser.add_argument('--dataset', type=str, default='MyBSD100x2')
 parser.add_argument('--kerneltype', default='Bicubic_LR', help='save result')
 # model parameters
