@@ -37,13 +37,6 @@ parser.add_argument('--gpu', type=int, default=4, help='gpu index')
 
 args = parser.parse_args()
 
-if args.gpu == 0:
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-elif args.gpu == 4:
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = "4"
-
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv2d') != -1:
@@ -66,17 +59,14 @@ def test(args):
 
         gt = cv2.imread(gt_file)
         sr = cv2.imread(sr_file)
-        gt = RGB_np2Tensor(gt)
-        sr = RGB_np2Tensor(sr)
-
-        lpips_val = lpips(sr, gt, net_type='vgg').item()
-        psnr_val = get_psnr(sr, gt) # this function is modifying sr and gt so I'm loading the images again below (Samuel)
-
-        gt = cv2.imread(gt_file)
-        sr = cv2.imread(sr_file)
-        gt = RGB_np2Tensor(gt)
-        sr = RGB_np2Tensor(sr)
+        gt = RGB_np2Tensor(gt).cuda()
+        sr = RGB_np2Tensor(sr).cuda()
+        gt = gt.cuda()
+        sr = sr.cuda()
+        
+        psnr_val = get_psnr(sr, gt)
         ssim_val = get_ssim(sr, gt)
+        lpips_val = lpips(sr, gt, net_type='vgg').item()
 
         avg_psnr += psnr_val
         avg_ssim += ssim_val
