@@ -3,18 +3,12 @@ import os.path
 import torch
 import sys
 
-
 class saveData():
-    def __init__(self, args, imageName):
+    def __init__(self, args):
         self.args = args
-        self.save_dir = os.path.join(args.saveDir, args.name)
-        self.save_dir = os.path.join(self.save_dir, imageName)
+        self.save_dir = os.path.join(args.saveDir, args.load)
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
-
-        self.save_dir_image = os.path.join(self.save_dir, 'test_image')
-        if not os.path.exists(self.save_dir_image):
-            os.makedirs(self.save_dir_image)
         self.save_dir_model = os.path.join(self.save_dir, 'model')
         if not os.path.exists(self.save_dir_model):
             os.makedirs(self.save_dir_model)

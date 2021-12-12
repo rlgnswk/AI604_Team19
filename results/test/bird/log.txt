@@ -1,2 +1,0 @@
-[100 / 200] 	Reconstruction Loss: 0.01008	 Generator Loss: 0.0495 	 Discriminator Loss: 0.0494 	 Time: 0:00:20.080977
-[200 / 200] 	Reconstruction Loss: 0.00997	 Generator Loss: 0.0448 	 Discriminator Loss: 0.0445 	 Time: 0:00:38.958964
