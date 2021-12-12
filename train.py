@@ -45,7 +45,7 @@ parser.add_argument('--SR_ratio', type=int, default=2, help='SR ratio')
 parser.add_argument('--patchSize', type=int, default=64, help='patch size (GT)')
 parser.add_argument('--batchSize', type=int, default=12, help='input batch size for training')
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
-parser.add_argument('--lrDecay', type=int, default=50, help='epoch of half lr')
+parser.add_argument('--lrDecay', type=int, default=500, help='iters of half lr')
 parser.add_argument('--decayType', default='step', help='lr decay function')
 parser.add_argument('--iter', type=int, default=2000, help='number of iterations to train')
 parser.add_argument('--period', type=int, default=100, help='period of evaluation')
@@ -63,20 +63,21 @@ def weights_init(m):
         init.xavier_normal_(m.weight.data)
 
 # setting learning rate decay
-def set_lr(args, epoch, optimizer):
+def set_lr(args, iters, optimizer):
     lrDecay = args.lrDecay
     decayType = args.decayType
     if decayType == 'step':
-        epoch_iter = (epoch + 1) // lrDecay
-        lr = args.lr / 2 ** epoch_iter
+        iters_iter = (iters + 1) // lrDecay
+        lr = args.lr / 2 ** iters_iter
     elif decayType == 'exp':
         k = math.log(2) / lrDecay
-        lr = args.lr * math.exp(-k * epoch)
+        lr = args.lr * math.exp(-k * iters)
     elif decayType == 'inv':
         k = 1 / lrDecay
-        lr = args.lr / (1 + k * epoch)
+        lr = args.lr / (1 + k * iters)
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+    
     return lr
 
 # parameter counter
@@ -118,6 +119,9 @@ def test(save, netG, lq, gt, idx, iters):
 
     return psnr, ssim, lpips_score
 
+def Average_list(lst):
+    return sum(lst) / len(lst)
+
 def train(args):
     gt_path = os.path.join(args.data_dir, args.dataset, args.GT_path)
     lr_path = os.path.join(args.data_dir, args.dataset, args.LR_path)
@@ -130,6 +134,12 @@ def train(args):
     tot_loss_Recon = 0
     tot_loss_Perc = 0
     idx = 0
+
+    tot_psnr_list=[]
+    tot_ssim_list=[]
+    tot_lpips_list=[]
+
+    total_min_lipis_index_list = []
 
     for gt_file, lr_file in zip(gt_filelist, lr_filelist):
         idx += 1
@@ -169,9 +179,14 @@ def train(args):
 
         save = saveData(args)
 
+
+        psnr_list = []
+        ssim_list = []
+        lpips_list = []
+
         for iters in range(args.iter):
-            # netG_lr = set_lr(args, iters, optimizer_G)
-            # netD_lr = set_lr(args, iters, optimizer_D)
+            lr = set_lr(args, iters, optimizer_G)
+            lr = set_lr(args, iters, optimizer_D)
 
             hr_fathers, lr_sons = dataAug(lq, args)
             im_lr = Variable(lr_sons)
@@ -226,6 +241,9 @@ def train(args):
                 # test
                 netG.eval()
                 psnr, ssim, lpips_score = test(save, netG, lq, gt, idx, iters)
+                psnr_list.append(psnr)
+                ssim_list.append(ssim)
+                lpips_list.append(lpips_score)
                 netG.train()
                 
                 lossD = tot_loss_D / args.period
@@ -234,7 +252,8 @@ def train(args):
                 lossPerc = tot_loss_Perc / args.period
 
                 # print
-                log = "[{} / {}] \t Reconstruction Loss: {:.8f} \t Perceptual Loss: {:.8f} \t Generator Loss: {:.8f} \t Discriminator Loss: {:.8f} \t PSNR: {:.4f} \t SSIM: {:.4f} \t LPIPS: {:.4f}".format(iters + 1, args.iter, lossRecon, lossPerc, lossGAN, lossD, psnr, ssim, lpips_score)
+                print("lr: ", lr)
+                log = "[{} / {}] lr: {} \t Reconstruction Loss: {:.8f} \t Perceptual Loss: {:.8f} \t Generator Loss: {:.8f} \t Discriminator Loss: {:.8f} \t PSNR: {:.4f} \t SSIM: {:.4f} \t LPIPS: {:.4f}".format(iters + 1, args.iter, lr, lossRecon, lossPerc, lossGAN, lossD, psnr, ssim, lpips_score)
                 print(log)
                 save.save_log(log)
                 save.save_model(netG, iters)
@@ -243,6 +262,31 @@ def train(args):
                 tot_loss_G = 0
                 tot_loss_D = 0
                 tot_loss_Perc = 0
+
+        tmp = min(lpips_list)
+        min_lpips_index = lpips_list.index(tmp)
+
+        tot_psnr_list.append(psnr_list[min_lpips_index])
+        tot_ssim_list.append(ssim_list[min_lpips_index])
+        tot_lpips_list.append(lpips_list[min_lpips_index])
+
+        total_min_lipis_index_list.append((min_lpips_index+1)*args.period)
+
+    log = "Avg Psnr: {}".format(Average_list(tot_psnr_list))
+    save.save_log(log)
+    print(log)
+
+    log = "Avg ssim: {}".format(Average_list(tot_ssim_list))
+    save.save_log(log)
+    print(log)
+    
+    log = "Avg lpips: {}".format(Average_list(tot_lpips_list))
+    save.save_log(log)
+    print(log)
+
+    for a in range(idx):
+        log = "{}th image index: {}".format(a+1, total_min_lipis_index_list[a])
+        save.save_log(log)
 
 if __name__ == '__main__':
     train(args)
