@@ -43,8 +43,6 @@ def dataAug(lq, args):
     img_lr = F.interpolate(img_hr, size=[x//args.SR_ratio, y//args.SR_ratio], mode='bicubic', align_corners=True)   # Downsample
     img_lr = F.interpolate(img_lr, size=[x, y], mode='bicubic', align_corners=True)                                 # Upsample
 
-    print(lpips(img_hr, img_lr, net_type='vgg').item())
-
     # crop
     img_hr, img_lr = crop(img_hr, img_lr, min(args.patchSize, min(x,y)))
 
