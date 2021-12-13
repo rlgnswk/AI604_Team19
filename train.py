@@ -43,7 +43,7 @@ parser.add_argument('--nThreads', type=int, default=0, help='number of threads f
 
 # training parameters
 parser.add_argument('--SR_ratio', type=int, default=2, help='SR ratio')
-parser.add_argument('--patchSize', type=int, default=64, help='patch size (GT)')
+parser.add_argument('--patchSize', type=int, default=128, help='patch size (GT)')
 parser.add_argument('--batchSize', type=int, default=12, help='input batch size for training')
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
 parser.add_argument('--lrDecay', type=int, default=500, help='iters of half lr')
@@ -52,8 +52,8 @@ parser.add_argument('--iter', type=int, default=2000, help='number of iterations
 parser.add_argument('--period', type=int, default=100, help='period of evaluation')
 parser.add_argument('--kerneltype', default='g02', help='kernel type')
 
-parser.add_argument('--alpha_P', type=float, default=1.0, help='SR ratio')
-parser.add_argument('--alpha_G', type=float, default=1.0, help='SR ratio')
+parser.add_argument('--alpha_P', type=float, default=1.0, help='perceptual loss tradeoff parameter')
+parser.add_argument('--alpha_G', type=float, default=1.0, help='adversarial loss tradeoff parameter')
 
 
 args = parser.parse_args()
@@ -164,7 +164,7 @@ def train(args):
         criterion_G = nn.BCELoss()
         criterion_Recon = nn.L1Loss()
 
-        vgg = models.VGG16(requires_grad=False).cuda()
+        vgg = models.VGG16(requires_grad=False)
         criterion_vgg = nn.L1Loss()
 
         netD.apply(weights_init)
@@ -172,8 +172,10 @@ def train(args):
 
         netD.cuda()
         netG.cuda()
+        vgg.cuda()
         criterion_G.cuda()
         criterion_D.cuda()
+        criterion_vgg.cuda()
 
         netD.train()
         netG.train()

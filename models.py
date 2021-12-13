@@ -16,7 +16,7 @@ class Conv_block4NetD(nn.Module):
         x = self.leaky_relu(x)
         return x
 
-# input size 64×64
+# minimum input size 64×64
 class netD(nn.Module):
     def __init__(self, input_channel = 3, mid_channel = 64):
         self.input_channel = input_channel

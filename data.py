@@ -32,16 +32,15 @@ def dataAug(lq, args):
             if x%args.SR_ratio==0 and y%args.SR_ratio==0:
                 reshape_dims.append((x, y))
 
-    weights = []
     weights = np.float32([x * y / (lq.shape[2] * lq.shape[3]) for (x, y) in reshape_dims])
     pair_prob = weights / np.sum(weights)
 
     x, y = random.choices(reshape_dims, weights=pair_prob, k=1)[0]
 
     # generate hr father / lr son
-    img_hr = F.interpolate(lq, size=[x, y], mode='bicubic', align_corners=True)
+    img_hr = F.interpolate(lq, size=[x,y], mode='bicubic', align_corners=True)
     img_lr = F.interpolate(img_hr, size=[x//args.SR_ratio, y//args.SR_ratio], mode='bicubic', align_corners=True)   # Downsample
-    img_lr = F.interpolate(img_lr, size=[x, y], mode='bicubic', align_corners=True)                                 # Upsample
+    img_lr = F.interpolate(img_lr, size=[x,y], mode='bicubic', align_corners=True)                                  # Upsample
 
     # crop
     img_hr, img_lr = crop(img_hr, img_lr, min(args.patchSize, min(x,y)))
@@ -92,5 +91,6 @@ def crop(img_hr, img_lr, patch_size):
     return img_hr, img_lr
 
 args = dummy()
-img = torch.randn((1, 3, 172, 114))
+img = torch.randn((1, 3, 256, 256))
 hr_fathers, lr_sons = dataAug(img, args)
+print(hr_fathers.shape)
