@@ -116,7 +116,7 @@ def test(save, netG, lq, gt, idx, iters):
     output_rgb[:, :, 1] = output[1]
     output_rgb[:, :, 2] = output[0]
     out = Image.fromarray(np.uint8(output_rgb), mode='RGB')
-    out.save(save_dir + '/img_' + str(idx) + '_iter_' + str(iters) + '.png')
+    out.save('{}/img_{}_iter_{}.png'.format(save_dir, str(idx).zfill(3), str(iters).zfill(5)))
 
     return psnr, ssim, lpips_score
 
@@ -149,8 +149,8 @@ def train(args):
         gt_pi = cv2.imread(gt_file)
         lq_pi = cv2.imread(lr_file)
 
-        gt = RGB_np2Tensor(gt_pi).cuda()
-        lq = RGB_np2Tensor(lq_pi).cuda()
+        gt = RGB_np2Tensor(gt_pi)
+        lq = RGB_np2Tensor(lq_pi)
 
         gt = gt.unsqueeze(0)
         lq = lq.unsqueeze(0)
@@ -180,7 +180,6 @@ def train(args):
 
         save = saveData(args)
 
-
         psnr_list = []
         ssim_list = []
         lpips_list = []
@@ -190,11 +189,10 @@ def train(args):
             lr = set_lr(args, iters, optimizer_D)
 
             hr_fathers, lr_sons = dataAug(lq, args)
-            im_lr = Variable(lr_sons)
-            im_hr = Variable(hr_fathers)
+            im_lr = Variable(lr_sons.cuda())
+            im_hr = Variable(hr_fathers.cuda())
 
-            input_img = F.interpolate(im_lr, scale_factor=args.SR_ratio, mode='bicubic')
-            output_SR = netG(input_img)
+            output_SR = netG(im_lr)
 
             # update D
             for p in netD.parameters():
@@ -221,14 +219,11 @@ def train(args):
             for p in netD.parameters():
                 p.requires_grad = False
             netG.zero_grad()
-            
 
-
-            loss_Recon = criterion_Recon(output_SR, im_hr)           # Reconstruction Loss
+            loss_Recon = criterion_Recon(output_SR, im_hr)                          # Reconstruction Loss
             loss_Perc = args.alpha_P * criterion_vgg(vgg(output_SR), vgg(im_hr))    # Perceptual Loss
             loss_G = args.alpha_G * criterion_G(netD(output_SR), true_labels)       # GAN Loss
 
-            
             loss_G_total = loss_Recon +  loss_G +  loss_Perc
             loss_G_total.backward()
             optimizer_G.step()

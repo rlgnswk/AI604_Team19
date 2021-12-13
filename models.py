@@ -71,7 +71,7 @@ class netSR(nn.Module):
         
     def forward(self, x):
         x_In = x
-        x = self.Conv_blockIn(x)
+        x = self.Conv_blockIn(x + torch.normal(0, 0.1, size=x.shape).cuda())
         x = self.Conv_block1(x)
         x = self.Conv_block2(x)
         x = self.Conv_block3(x)

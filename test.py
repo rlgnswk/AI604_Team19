@@ -60,8 +60,6 @@ def test(args):
         sr = cv2.imread(sr_file)
         gt = RGB_np2Tensor(gt).cuda()
         sr = RGB_np2Tensor(sr).cuda()
-        gt = gt.cuda()
-        sr = sr.cuda()
         
         psnr_val = get_psnr(sr, gt)
         ssim_val = get_ssim(sr, gt)
