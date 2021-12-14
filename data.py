@@ -2,31 +2,50 @@ import torch
 import random
 import torch.nn.functional as F
 from torchvision.utils import save_image
-from math import floor
+
+import numpy as np
+import random
 import cv2
+from math import floor
+
+from metric import *
+from lpips import lpips
+
+class dummy():
+    def __init__(self):
+        self.SR_ratio = 2
+        self.patchSize = 128
 
 def dataAug(lq, args):
-    # generate aspect ratio between 128 and shorter side of image
-    while True:
-        if lq.shape[2] <= lq.shape[3]:
-            y = random.randint(64, lq.shape[2])
-            x = floor(lq.shape[3] / lq.shape[2] * y)
+    # generate aspect ratio between 64 and shorter side of image
+    reshape_dims = []
+    if lq.shape[2] <= lq.shape[3]:
+        for i in range(64, lq.shape[2]+1):
+            y = i
+            x = round(lq.shape[3] / lq.shape[2] * y)
             if x%args.SR_ratio==0 and y%args.SR_ratio==0:
-                break
-        else:
-            x = random.randint(64, lq.shape[3])
-            y = floor(lq.shape[2] / lq.shape[3] * x)
+                reshape_dims.append((x, y))
+    else:
+        for i in range(64, lq.shape[3]+1):
+            x = i
+            y = round(lq.shape[2] / lq.shape[3] * x)
             if x%args.SR_ratio==0 and y%args.SR_ratio==0:
-                break
+                reshape_dims.append((x, y))
 
-    # downsample / generate hr father
-    img_hr = F.interpolate(lq, size=[x, y])
-    img_lr = F.interpolate(img_hr, size=[x//args.SR_ratio, y//args.SR_ratio])
+    weights = np.float32([x * y / (lq.shape[2] * lq.shape[3]) for (x, y) in reshape_dims])
+    pair_prob = weights / np.sum(weights)
+
+    x, y = random.choices(reshape_dims, weights=pair_prob, k=1)[0]
+
+    # generate hr father / lr son
+    img_hr = F.interpolate(lq, size=[x,y], mode='bicubic', align_corners=True)
+    img_lr = F.interpolate(img_hr, size=[x//args.SR_ratio, y//args.SR_ratio], mode='bicubic', align_corners=True)   # Downsample
+    img_lr = F.interpolate(img_lr, size=[x,y], mode='bicubic', align_corners=True)                                  # Upsample
 
     # crop
-    img_hr, img_lr = crop(img_hr, img_lr, args.SR_ratio, args.patchSize)
+    img_hr, img_lr = crop(img_hr, img_lr, min(args.patchSize, min(x,y)))
 
-    # get lr sons
+    # generate hr-lr pairs
     hr_fathers = img_hr
     lr_sons = img_lr
     
@@ -60,18 +79,18 @@ def RGB_np2Tensor(img):
     img = (img / 255.0 - 0.5) * 2
     return img
 
-def crop(img_hr, img_lr, SR_ratio, patch_size):
+def crop(img_hr, img_lr, patch_size):
     _, _, input_size_h, input_size_w = img_lr.shape
 
-    lr_patch_size = patch_size // SR_ratio
-    x_start_lr = random.randrange(0, input_size_w - lr_patch_size + 1)
-    y_start_lr = random.randrange(0, input_size_h - lr_patch_size + 1)
+    x_start = random.randrange(0, input_size_w - patch_size + 1)
+    y_start = random.randrange(0, input_size_h - patch_size + 1)
 
-    hr_patch_size = patch_size
-    x_start_hr = 2 * x_start_lr
-    y_start_hr = 2 * y_start_lr
-
-    img_hr = img_hr[: ,: , y_start_hr:y_start_hr+hr_patch_size, x_start_hr:x_start_hr+hr_patch_size]
-    img_lr = img_lr[: ,: , y_start_lr:y_start_lr+lr_patch_size, x_start_lr:x_start_lr+lr_patch_size]
+    img_hr = img_hr[: ,: , y_start:y_start+patch_size, x_start:x_start+patch_size]
+    img_lr = img_lr[: ,: , y_start:y_start+patch_size, x_start:x_start+patch_size]
 
     return img_hr, img_lr
+
+args = dummy()
+img = torch.randn((1, 3, 256, 256))
+hr_fathers, lr_sons = dataAug(img, args)
+print(hr_fathers.shape)

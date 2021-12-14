@@ -4,15 +4,16 @@ from torch.nn import init
 from torch.autograd import Variable
 from torchvision.utils import save_image
 
+
+import numpy as np
 import os
 import argparse
 import random
 import cv2
 import time
-from datetime import datetime
 import math
+from datetime import datetime
 from math import log10
-import numpy as np
 from PIL import Image
 
 from utils import *
@@ -30,7 +31,7 @@ parser.add_argument('--saveDir', default='./results', help='datasave directory')
 parser.add_argument('--load', default='NetFinal', help='save result')
 
 # dataPath
-parser.add_argument('--data_dir', type=str, default='../1208_results_and_dataset/MyDataset_AI604')
+parser.add_argument('--data_dir', type=str, default='./MyDataset_AI604')
 parser.add_argument('--dataset', type=str, default='MySet5x2')
 parser.add_argument('--GT_path', type=str, default='HR')
 parser.add_argument('--LR_path', type=str, default='g20_non_ideal_LR')
@@ -42,7 +43,7 @@ parser.add_argument('--nThreads', type=int, default=0, help='number of threads f
 
 # training parameters
 parser.add_argument('--SR_ratio', type=int, default=2, help='SR ratio')
-parser.add_argument('--patchSize', type=int, default=64, help='patch size (GT)')
+parser.add_argument('--patchSize', type=int, default=128, help='patch size (GT)')
 parser.add_argument('--batchSize', type=int, default=12, help='input batch size for training')
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
 parser.add_argument('--lrDecay', type=int, default=500, help='iters of half lr')
@@ -51,8 +52,8 @@ parser.add_argument('--iter', type=int, default=2000, help='number of iterations
 parser.add_argument('--period', type=int, default=100, help='period of evaluation')
 parser.add_argument('--kerneltype', default='g02', help='kernel type')
 
-parser.add_argument('--alpha_P', type=float, default=1.0, help='SR ratio')
-parser.add_argument('--alpha_G', type=float, default=1.0, help='SR ratio')
+parser.add_argument('--alpha_P', type=float, default=1.0, help='perceptual loss tradeoff parameter')
+parser.add_argument('--alpha_G', type=float, default=1.0, help='adversarial loss tradeoff parameter')
 
 
 args = parser.parse_args()
@@ -115,7 +116,7 @@ def test(save, netG, lq, gt, idx, iters):
     output_rgb[:, :, 1] = output[1]
     output_rgb[:, :, 2] = output[0]
     out = Image.fromarray(np.uint8(output_rgb), mode='RGB')
-    out.save(save_dir + '/img_' + str(idx) + '_iter_' + str(iters) + '.png')
+    out.save('{}/img_{}_iter_{}.png'.format(save_dir, str(idx).zfill(3), str(iters).zfill(5)))
 
     return psnr, ssim, lpips_score
 
@@ -148,8 +149,8 @@ def train(args):
         gt_pi = cv2.imread(gt_file)
         lq_pi = cv2.imread(lr_file)
 
-        gt = RGB_np2Tensor(gt_pi).cuda()
-        lq = RGB_np2Tensor(lq_pi).cuda()
+        gt = RGB_np2Tensor(gt_pi)
+        lq = RGB_np2Tensor(lq_pi)
 
         gt = gt.unsqueeze(0)
         lq = lq.unsqueeze(0)
@@ -163,7 +164,7 @@ def train(args):
         criterion_G = nn.BCELoss()
         criterion_Recon = nn.L1Loss()
 
-        vgg = models.VGG16(requires_grad=False).cuda()
+        vgg = models.VGG16(requires_grad=False)
         criterion_vgg = nn.L1Loss()
 
         netD.apply(weights_init)
@@ -171,14 +172,15 @@ def train(args):
 
         netD.cuda()
         netG.cuda()
+        vgg.cuda()
         criterion_G.cuda()
         criterion_D.cuda()
+        criterion_vgg.cuda()
 
         netD.train()
         netG.train()
 
         save = saveData(args)
-
 
         psnr_list = []
         ssim_list = []
@@ -189,11 +191,10 @@ def train(args):
             lr = set_lr(args, iters, optimizer_D)
 
             hr_fathers, lr_sons = dataAug(lq, args)
-            im_lr = Variable(lr_sons)
-            im_hr = Variable(hr_fathers)
+            im_lr = Variable(lr_sons.cuda())
+            im_hr = Variable(hr_fathers.cuda())
 
-            input_img = F.interpolate(im_lr, scale_factor=args.SR_ratio, mode='bicubic')
-            output_SR = netG(input_img)
+            output_SR = netG(im_lr)
 
             # update D
             for p in netD.parameters():
@@ -220,14 +221,11 @@ def train(args):
             for p in netD.parameters():
                 p.requires_grad = False
             netG.zero_grad()
-            
 
-
-            loss_Recon = criterion_Recon(output_SR, im_hr)           # Reconstruction Loss
+            loss_Recon = criterion_Recon(output_SR, im_hr)                          # Reconstruction Loss
             loss_Perc = args.alpha_P * criterion_vgg(vgg(output_SR), vgg(im_hr))    # Perceptual Loss
             loss_G = args.alpha_G * criterion_G(netD(output_SR), true_labels)       # GAN Loss
 
-            
             loss_G_total = loss_Recon +  loss_G +  loss_Perc
             loss_G_total.backward()
             optimizer_G.step()
