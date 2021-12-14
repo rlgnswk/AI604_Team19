@@ -30,21 +30,16 @@ def get_psnr(sr_image, ground_truth):
     return psnr_val
 
 def get_ssim(sr_image, ground_truth):
-    # input should be torch tensors    
+    # input should be torch tensors
 
     # denormalize and convert to numpy array
     sr_image = to_numpy_array(sr_image)
     ground_truth = to_numpy_array(ground_truth)
 
     # ssim computation
-    ssim_val = ssim(np.transpose(ground_truth, (1,2,0)),
-                    np.transpose(sr_image, (1,2,0)),
+    ssim_val = ssim(np.transpose(ground_truth.astype(int), (1,2,0)),
+                    np.transpose(sr_image.astype(int), (1,2,0)),
+                    data_range=255.0,
                     multichannel=True)
 
     return ssim_val
-
-# sr_image = torch.randn((1, 3, 32, 32))
-# ground_truth = torch.randn((1, 3, 32, 32))
-
-# print(get_psnr(sr_image, ground_truth))
-# print(get_ssim(sr_image, ground_truth))
