@@ -11,11 +11,6 @@ from math import floor
 from metric import *
 from lpips import lpips
 
-class dummy():
-    def __init__(self):
-        self.SR_ratio = 2
-        self.patchSize = 128
-
 def dataAug(lq, args):
     # generate aspect ratio between 64 and shorter side of image
     reshape_dims = []
@@ -32,18 +27,20 @@ def dataAug(lq, args):
             if x%args.SR_ratio==0 and y%args.SR_ratio==0:
                 reshape_dims.append((x, y))
 
+    # generate probability for aspect ratio
     weights = np.float32([x * y / (lq.shape[2] * lq.shape[3]) for (x, y) in reshape_dims])
     pair_prob = weights / np.sum(weights)
 
+    # choose aspect ratio
     x, y = random.choices(reshape_dims, weights=pair_prob, k=1)[0]
 
     # generate hr father / lr son
-    img_hr = F.interpolate(lq, size=[x,y], mode='bicubic', align_corners=True)
-    img_lr = F.interpolate(img_hr, size=[x//args.SR_ratio, y//args.SR_ratio], mode='bicubic', align_corners=True)   # Downsample
-    img_lr = F.interpolate(img_lr, size=[x,y], mode='bicubic', align_corners=True)                                  # Upsample
+    img_hr = F.interpolate(lq, size=[x,y], mode='bicubic')
+    img_lr = F.interpolate(img_hr, size=[x//args.SR_ratio, y//args.SR_ratio], mode='bicubic')   # Downsample
+    img_lr = F.interpolate(img_lr, size=[x,y], mode='bicubic')                                  # Upsample
 
     # crop
-    img_hr, img_lr = crop(img_hr, img_lr, min(args.patchSize, min(x,y)))
+    img_hr, img_lr = crop(img_hr, img_lr, min(args.patchSize, min(x,y)))    
 
     # generate hr-lr pairs
     hr_fathers = img_hr
@@ -75,12 +72,13 @@ def RGB_np2Tensor(img):
     # to Tensor
     ts = (2, 0, 1)
     img = torch.Tensor(img.transpose(ts).astype(float)).mul_(1.0)
+    
     # normalization [-1,1]
     img = (img / 255.0 - 0.5) * 2
     return img
 
 def crop(img_hr, img_lr, patch_size):
-    _, _, input_size_h, input_size_w = img_lr.shape
+    _, _, input_size_h, input_size_w = img_hr.shape
 
     x_start = random.randrange(0, input_size_w - patch_size + 1)
     y_start = random.randrange(0, input_size_h - patch_size + 1)
@@ -89,8 +87,3 @@ def crop(img_hr, img_lr, patch_size):
     img_lr = img_lr[: ,: , y_start:y_start+patch_size, x_start:x_start+patch_size]
 
     return img_hr, img_lr
-
-args = dummy()
-img = torch.randn((1, 3, 256, 256))
-hr_fathers, lr_sons = dataAug(img, args)
-print(hr_fathers.shape)

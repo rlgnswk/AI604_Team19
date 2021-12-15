@@ -101,6 +101,7 @@ def test(save, netG, lq, gt, idx, iters):
     lpips_score = lpips(output, gt, net_type='vgg').item()
 
     # saving image
+    # if iters+1 == args.iter:
     output = output.cpu()
     output = output.data.squeeze(0)
     mean = [0.5, 0.5, 0.5]
@@ -175,6 +176,7 @@ def train(args):
         vgg.cuda()
         criterion_G.cuda()
         criterion_D.cuda()
+        criterion_Recon.cuda()
         criterion_vgg.cuda()
 
         netD.train()
@@ -226,7 +228,7 @@ def train(args):
             loss_Perc = args.alpha_P * criterion_vgg(vgg(output_SR), vgg(im_hr))    # Perceptual Loss
             loss_G = args.alpha_G * criterion_G(netD(output_SR), true_labels)       # GAN Loss
 
-            loss_G_total = loss_Recon +  loss_G +  loss_Perc
+            loss_G_total = loss_Recon + loss_G + loss_Perc
             loss_G_total.backward()
             optimizer_G.step()
 
@@ -234,6 +236,8 @@ def train(args):
             tot_loss_Perc += loss_Perc
             tot_loss_G += loss_G
             tot_loss_D += loss_D_total
+
+
 
             if (iters + 1) % args.period == 0:
                 # test
@@ -250,11 +254,11 @@ def train(args):
                 lossPerc = tot_loss_Perc / args.period
 
                 # print
-                print("lr: ", lr)
+                # print("lr: ", lr)
                 log = "[{} / {}] lr: {} \t Reconstruction Loss: {:.8f} \t Perceptual Loss: {:.8f} \t Generator Loss: {:.8f} \t Discriminator Loss: {:.8f} \t PSNR: {:.4f} \t SSIM: {:.4f} \t LPIPS: {:.4f}".format(iters + 1, args.iter, lr, lossRecon, lossPerc, lossGAN, lossD, psnr, ssim, lpips_score)
                 print(log)
                 save.save_log(log)
-                save.save_model(netG, iters)
+                if iters+1 == args.iter: save.save_model(netG, iters)
 
                 tot_loss_Recon = 0
                 tot_loss_G = 0
