@@ -9,23 +9,16 @@ import numpy as np
 def dataAug(lq, args):
     # generate aspect ratio between 128 and shorter side of image
     #if original image is less than 128, the patch size is given to 64
-    mi=min(lq.shape[2], lq.shape[3])
-    if mi<=128:
-        patch_size=64
-    else:
-        patch_size = args.patchSize
-
-
     sizes=[]
     if lq.shape[2] <= lq.shape[3]:
-        for i in range(patch_size, lq.shape[2]):
+        for i in range(64, lq.shape[2]):
             x=i
             y = floor(lq.shape[3] / lq.shape[2] * x)
             size=(x,y)
             sizes.append(size)
 
     else:
-        for j in range(patch_size, lq.shape[3]):
+        for j in range(64, lq.shape[3]):
             y = j
             x = floor(lq.shape[2] / lq.shape[3] * y)
             size = (x, y)
