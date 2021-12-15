@@ -18,7 +18,7 @@ from PIL import Image as PIL_image
 from data import *
 from metric import *
 from lpips import lpips
-from vgg import Vgg16
+
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--name', default='test', help='save result')
