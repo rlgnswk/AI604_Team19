@@ -147,7 +147,7 @@ def train(args):
         criterion_D = nn.BCELoss().cuda()
         criterion_G = nn.BCELoss().cuda()
         criterion_Recon = nn.L1Loss().cuda()
-        criterion_mse = nn.MSELoss().cuda()
+        criterion_mse = nn.L1Loss().cuda()
 
 
         #weight initialize
