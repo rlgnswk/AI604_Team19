@@ -31,7 +31,7 @@ parser.add_argument('--saveDir', default='./results', help='datasave directory')
 parser.add_argument('--load', default='NetFinal', help='save result')
 
 # dataPath
-parser.add_argument('--data_dir', type=str, default='./MyDataset_AI604')
+parser.add_argument('--data_dir', type=str, default='../1208_results_and_dataset/MyDataset_AI604')
 parser.add_argument('--dataset', type=str, default='MySet5x2')
 parser.add_argument('--GT_path', type=str, default='HR')
 parser.add_argument('--LR_path', type=str, default='g20_non_ideal_LR')
