@@ -29,6 +29,10 @@ The results will save in ```<ZSRGAN_path>/experiments/```
 python train.py --name <save_result_path>
 ```
 ## Run on your data:
+You can find additional dataset 
+from https://drive.google.com/file/d/16L961dGynkraoawKE2XyiCh4pdRS-e4Y/view 
+provided by [MZSR](https://github.com/JWSoh/MZSR) (CVPR 2020)
+
 First, put your data files in ```<ZSRGAN_path>/datasets/```
 
 The results will save in ```<ZSRGAN_path>/experiments/```
@@ -36,3 +40,5 @@ The results will save in ```<ZSRGAN_path>/experiments/```
 ```
 python train.py --name <save_result_path> --dataset <name_of_your_dataset> --GT_path <HR_folder_in_your_dataset> --LR_path <LR_folder_in_your_dataset>
 ```
+#Acknowledgement
+
