@@ -25,14 +25,14 @@ from lpips import lpips
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--name', default='test', help='save result')
+parser.add_argument('--name', default='experiments', help='save result')
 parser.add_argument('--gpu', type=int, default=0)
-parser.add_argument('--saveDir', default='./results', help='datasave directory')
+parser.add_argument('--saveDir', default='test_results', help='datasave directory')
 parser.add_argument('--load', default='NetFinal', help='save result')
 
 # dataPath
-parser.add_argument('--data_dir', type=str, default='../1208_results_and_dataset/MyDataset_AI604')
-parser.add_argument('--dataset', type=str, default='MySet5x2')
+parser.add_argument('--data_dir', type=str, default='./datasets')
+parser.add_argument('--dataset', type=str, default='MySet5')
 parser.add_argument('--GT_path', type=str, default='HR')
 parser.add_argument('--LR_path', type=str, default='g20_non_ideal_LR')
 
