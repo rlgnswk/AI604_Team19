@@ -22,6 +22,8 @@
 
 ## Run on your data:
 First, put your data files in ```<ZSRGAN_path>/datasets/```
+The results will save in ```<Code_path>/experiments/```
+
 ```
-python train.py --saveDir <save_result_path>
+python train.py --name <save_result_path>
 ```
