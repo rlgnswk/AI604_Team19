@@ -20,7 +20,7 @@
 ----------
 # Usage:
 
-## Run on your data:
+## Train on sample dataset:
 First, put your data files in ```<ZSRGAN_path>/datasets/```
 
 The results will save in ```<ZSRGAN_path>/experiments/```
