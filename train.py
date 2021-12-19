@@ -1,35 +1,41 @@
 import torch
-import torch.nn as nn  #
-
-from torch.autograd import Variable
-import model
-import random
-from utils import *
-import argparse
-import time
-from datetime import datetime
-import math
-from math import log10
+import torch.nn as nn
 from torch.nn import init
-import numpy as np
-from PIL import Image
+from torch.autograd import Variable
 from torchvision.utils import save_image
-from PIL import Image as PIL_image
+
+
+import numpy as np
+import os
+import argparse
+import random
+import cv2
+import time
+import math
+from datetime import datetime
+from math import log10
+from PIL import Image
+
+from utils import *
+import models
 from data import *
 from metric import *
 from lpips import lpips
 
+
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--name', default='test', help='save result')
-parser.add_argument('--gpu', type=int)
-parser.add_argument('--saveDir', default='./results', help='datasave directory')
+parser.add_argument('--saveDir', default='experiments', help='save result')
+parser.add_argument('--gpu', type=int, default=0)
+parser.add_argument('--name', default='test_results', help='datasave directory')
 parser.add_argument('--load', default='NetFinal', help='save result')
 
 # dataPath
-parser.add_argument('--datapath', type=str, default='./MyDataset_AI604')
-parser.add_argument('--dataset', type=str, default='MySet5x2')
-parser.add_argument('--kerneltype', default='g20_non_ideal_LR', help='save result')
+parser.add_argument('--data_dir', type=str, default='./datasets')
+parser.add_argument('--dataset', type=str, default='MySet5')
+parser.add_argument('--GT_path', type=str, default='HR')
+parser.add_argument('--LR_path', type=str, default='g20_non_ideal_LR')
+
 # model parameters
 parser.add_argument('--input_channel', type=int, default=3, help='netSR and netD input channel')
 parser.add_argument('--mid_channel', type=int, default=64, help='netSR middle channel')
@@ -40,11 +46,16 @@ parser.add_argument('--SR_ratio', type=int, default=2, help='SR ratio')
 parser.add_argument('--patchSize', type=int, default=128, help='patch size (GT)')
 parser.add_argument('--batchSize', type=int, default=12, help='input batch size for training')
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
-parser.add_argument('--lrDecay', type=int, default=100, help='epoch of half lr')
-parser.add_argument('--decayType', default='inv', help='lr decay function')
-parser.add_argument('--iter', type=int, default=3000, help='number of iterations to train')
-parser.add_argument('--period', type=int, default=10, help='period of evaluation')
-parser.add_argument('--numhr', type=int, default=15, help='period of evaluation')
+parser.add_argument('--lrDecay', type=int, default=500, help='iters of half lr')
+parser.add_argument('--decayType', default='step', help='lr decay function')
+parser.add_argument('--iter', type=int, default=2000, help='number of iterations to train')
+parser.add_argument('--period', type=int, default=100, help='period of evaluation')
+parser.add_argument('--kerneltype', default='g02', help='kernel type')
+
+parser.add_argument('--alpha_P', type=float, default=1.0, help='perceptual loss tradeoff parameter')
+parser.add_argument('--alpha_G', type=float, default=1.0, help='adversarial loss tradeoff parameter')
+
+
 args = parser.parse_args()
 
 def weights_init(m):
@@ -53,34 +64,37 @@ def weights_init(m):
         init.xavier_normal_(m.weight.data)
 
 # setting learning rate decay
-def set_lr(args, epoch, optimizer):
+def set_lr(args, iters, optimizer):
     lrDecay = args.lrDecay
     decayType = args.decayType
     if decayType == 'step':
-        epoch_iter = (epoch + 1) // lrDecay
-        lr = args.lr / 2 ** epoch_iter
+        iters_iter = (iters + 1) // lrDecay
+        lr = args.lr / 2 ** iters_iter
     elif decayType == 'exp':
         k = math.log(2) / lrDecay
-        lr = args.lr * math.exp(-k * epoch)
+        lr = args.lr * math.exp(-k * iters)
     elif decayType == 'inv':
         k = 1 / lrDecay
-        lr = args.lr / (1 + k * epoch)
+        lr = args.lr / (1 + k * iters)
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+    
     return lr
 
 # parameter counter
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-def Average_list(lst):
-    return sum(lst) / len(lst)
+def test(save, netG, lq, gt, idx, iters):
+    save_dir = os.path.join(save.save_dir, 'result_image')
+    if not os.path.exists(os.path.join(save_dir)):
+        os.makedirs(save_dir)
 
-def test(save, netG, input, gt, iters, num):
-    netG.eval()
-    input = F.interpolate(input, scale_factor=args.SR_ratio, mode='bicubic')
     with torch.no_grad():
-        output = netG(input)
+        lq = Variable(lq.cuda(), volatile=False)
+        gt = Variable(gt.cuda())
+        input_img = F.interpolate(lq, scale_factor=args.SR_ratio, mode='bicubic')
+        output = netG(input_img)
 
     psnr = get_psnr(output, gt)
     ssim = get_ssim(output, gt)
@@ -98,87 +112,89 @@ def test(save, netG, input, gt, iters, num):
     output = output.clip(0, 255)
     sp_0, sp_1, sp_2 = output.shape
     output_rgb = np.zeros((sp_1, sp_2, sp_0))
-    output_rgb[:, :, 0] = output[0]
+    output_rgb[:, :, 0] = output[2]
     output_rgb[:, :, 1] = output[1]
-    output_rgb[:, :, 2] = output[2]
-    out = PIL_image.fromarray(np.uint8(output_rgb), mode='RGB')
-    out.save(args.saveDir + '/img_' + str(num) + '_iter_' + str(iters) + '.png')
+    output_rgb[:, :, 2] = output[0]
+    out = Image.fromarray(np.uint8(output_rgb), mode='RGB')
+    out.save('{}/img_{}_iter_{}.png'.format(save_dir, str(idx).zfill(3), str(iters).zfill(5)))
 
     return psnr, ssim, lpips_score
 
+def Average_list(lst):
+    return sum(lst) / len(lst)
+
 def train(args):
+    gt_path = os.path.join(args.data_dir, args.dataset, args.GT_path)
+    lr_path = os.path.join(args.data_dir, args.dataset, args.LR_path)
+
+    gt_filelist = sorted([os.path.join(gt_path, img) for img in os.listdir(gt_path)])
+    lr_filelist = sorted([os.path.join(lr_path, img) for img in os.listdir(lr_path)])
+
     tot_loss_G = 0
     tot_loss_D = 0
     tot_loss_Recon = 0
-    tot_loss_per=0
-    GT_path = os.path.join(args.datapath, args.dataset, 'HR')
-    LR_path = os.path.join(args.datapath, args.dataset, args.kerneltype)
+    tot_loss_Perc = 0
+    idx = 0
 
-    start = datetime.now()
-    gt_path = sorted(os.listdir(GT_path))
-    length = len(gt_path)
-
-    tot_psnr_list = []
-    tot_ssim_list = []
-    tot_lpips_list = []
+    tot_psnr_list=[]
+    tot_ssim_list=[]
+    tot_lpips_list=[]
 
     total_min_lipis_index_list = []
 
+    for gt_file, lr_file in zip(gt_filelist, lr_filelist):
+        idx += 1
+        print('Image {}:'.format(idx))
 
-    for num in range(length):  # num of data
-        #load file
-        gt_pi = PIL_image.open(GT_path + "/" + gt_path[num]).convert('RGB')
-        lq_pi = PIL_image.open(LR_path + "/" + gt_path[num]).convert('RGB')
+        gt_pi = cv2.imread(gt_file)
+        lq_pi = cv2.imread(lr_file)
 
-        gt = RGB_np2Tensor(np.array(gt_pi)).cuda()
-        lq = RGB_np2Tensor(np.array(lq_pi)).cuda()
+        gt = RGB_np2Tensor(gt_pi)
+        lq = RGB_np2Tensor(lq_pi)
 
-        gt = torch.unsqueeze(gt, dim=0)
-        lq = torch.unsqueeze(lq, dim=0)
+        gt = gt.unsqueeze(0)
+        lq = lq.unsqueeze(0)
 
-        #define network
-        netD = model.netD(input_channel=args.input_channel, mid_channel=args.mid_channel)
+        netD = models.netD(input_channel=args.input_channel, mid_channel=args.mid_channel)
         optimizer_D = torch.optim.Adam(netD.parameters(), lr=args.lr, betas=(0.5, 0.999))
+        criterion_D = nn.BCELoss()       
 
-        netG = model.netSR(input_channel=args.input_channel, mid_channel=args.mid_channel)
+        netG = models.netSR(input_channel=args.input_channel, mid_channel=args.mid_channel)
         optimizer_G = torch.optim.Adam(netG.parameters(), lr=args.lr, betas=(0.5, 0.999))
+        criterion_G = nn.BCELoss()
+        criterion_Recon = nn.L1Loss()
 
-        #define loss
-        criterion_D = nn.BCELoss().cuda()
-        criterion_G = nn.BCELoss().cuda()
-        criterion_Recon = nn.L1Loss().cuda()
-        criterion_mse = nn.L1Loss().cuda()
+        vgg = models.VGG16(requires_grad=False)
+        criterion_vgg = nn.L1Loss()
 
-
-        #weight initialize
         netD.apply(weights_init)
         netG.apply(weights_init)
 
-        #model to cuda
-        vgg = model.Vgg16(requires_grad=False)
-        vgg.cuda()
-
         netD.cuda()
         netG.cuda()
+        vgg.cuda()
+        criterion_G.cuda()
+        criterion_D.cuda()
+        criterion_vgg.cuda()
 
-        #model to train
         netD.train()
         netG.train()
 
-        save = saveData(args, gt_path[num])
+        save = saveData(args)
+
         psnr_list = []
         ssim_list = []
         lpips_list = []
 
-
         for iters in range(args.iter):
-            #set lr
-            netG_lr = set_lr(args, iters, optimizer_G)
-            netD_lr = set_lr(args, iters, optimizer_D)
+            lr = set_lr(args, iters, optimizer_G)
+            lr = set_lr(args, iters, optimizer_D)
 
             hr_fathers, lr_sons = dataAug(lq, args)
+            im_lr = Variable(lr_sons.cuda())
+            im_hr = Variable(hr_fathers.cuda())
 
-            output_SR = netG(lr_sons)
+            output_SR = netG(im_lr)
 
             # update D
             for p in netD.parameters():
@@ -186,7 +202,7 @@ def train(args):
             netD.zero_grad()
 
             # real image
-            output_real = netD(hr_fathers)
+            output_real = netD(im_hr)
             true_labels = Variable(torch.ones_like(output_real))
             loss_D_real = criterion_D(output_real, true_labels)
 
@@ -195,7 +211,7 @@ def train(args):
             D_fake = netD(fake_image)
             fake_labels = Variable(torch.zeros_like(D_fake))
             loss_D_fake = criterion_D(D_fake, fake_labels)
-
+            
             # total D loss
             loss_D_total = 0.5 * (loss_D_fake + loss_D_real)
             loss_D_total.backward()
@@ -206,55 +222,44 @@ def train(args):
                 p.requires_grad = False
             netG.zero_grad()
 
-            loss_Recon = 1*criterion_Recon(output_SR, hr_fathers)          # Reconstruction Loss
-            loss_Recon.backward(retain_graph=True)
+            loss_Recon = criterion_Recon(output_SR, im_hr)                          # Reconstruction Loss
+            loss_Perc = args.alpha_P * criterion_vgg(vgg(output_SR), vgg(im_hr))    # Perceptual Loss
+            loss_G = args.alpha_G * criterion_G(netD(output_SR), true_labels)       # GAN Loss
 
-            alpha = 1# I(gihoon) think It should be bigger
-
-            loss_G = alpha*criterion_G(netD(output_SR), true_labels)      # GAN Loss
-            loss_G.backward(retain_graph=True)
-
-            loss_per =alpha* criterion_mse(vgg(output_SR), vgg(hr_fathers))
-            loss_per.backward()
+            loss_G_total = loss_Recon +  loss_G +  loss_Perc
+            loss_G_total.backward()
             optimizer_G.step()
 
-
             tot_loss_Recon += loss_Recon
+            tot_loss_Perc += loss_Perc
             tot_loss_G += loss_G
             tot_loss_D += loss_D_total
-            tot_loss_per += loss_per
-
 
             if (iters + 1) % args.period == 0:
                 # test
-                psnr, ssim, lpips_score = test(save, netG, lq, gt, iters,num)
+                netG.eval()
+                psnr, ssim, lpips_score = test(save, netG, lq, gt, idx, iters)
                 psnr_list.append(psnr)
                 ssim_list.append(ssim)
                 lpips_list.append(lpips_score)
                 netG.train()
-
-                # loss
+                
                 lossD = tot_loss_D / args.period
                 lossGAN = tot_loss_G / args.period
                 lossRecon = tot_loss_Recon / args.period
-                lossPercep=tot_loss_per / args.period
+                lossPerc = tot_loss_Perc / args.period
 
-
-                end = datetime.now()
-                iter_time = (end - start)
-
-                #print
-                log = "[{} / {}]Generator lr: {} \tReconstruction Loss: {:.8f}\t Generator Loss: {:.8f} \t Perceptual Loss: {:.8f} \t Discriminator Loss: {:.8f} \t PSNR: {:.4f} \t SSIM: {:.4f} \t LPIPS: {:.4f} \t Time: {}".format(
-                    iters + 1, args.iter, netG_lr, lossRecon, lossGAN,lossPercep,  lossD, psnr, ssim, lpips_score, iter_time)
+                # print
+                #print("lr: ", lr)
+                log = "[{} / {}] lr: {} \t Reconstruction Loss: {:.8f} \t Perceptual Loss: {:.8f} \t Generator Loss: {:.8f} \t Discriminator Loss: {:.8f} \t PSNR: {:.4f} \t SSIM: {:.4f} \t LPIPS: {:.4f}".format(iters + 1, args.iter, lr, lossRecon, lossPerc, lossGAN, lossD, psnr, ssim, lpips_score)
                 print(log)
                 save.save_log(log)
-                save.save_model(netG, iters, gt_path[num])
+                save.save_model(netG, iters)
 
-                #initialize loss
                 tot_loss_Recon = 0
                 tot_loss_G = 0
                 tot_loss_D = 0
-                tot_loss_per=0
+                tot_loss_Perc = 0
 
         tmp = min(lpips_list)
         min_lpips_index = lpips_list.index(tmp)
@@ -272,15 +277,14 @@ def train(args):
     log = "Avg ssim: {}".format(Average_list(tot_ssim_list))
     save.save_log(log)
     print(log)
-
+    
     log = "Avg lpips: {}".format(Average_list(tot_lpips_list))
     save.save_log(log)
     print(log)
 
-    for a in range(length):
+    for a in range(idx):
         log = "{}th image index: {}".format(a+1, total_min_lipis_index_list[a])
         save.save_log(log)
-
 
 if __name__ == '__main__':
     train(args)
