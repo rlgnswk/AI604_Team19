@@ -6,7 +6,8 @@ import sys
 class saveData():
     def __init__(self, args):
         self.args = args
-        self.save_dir = os.path.join(args.saveDir, args.load)
+        self.save_dir = os.path.join(args.saveDir, args.name)
+        #self.save_dir = os.path.join(args.saveDir, args.load)
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
         self.save_dir_model = os.path.join(self.save_dir, 'model')

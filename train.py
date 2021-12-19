@@ -25,9 +25,9 @@ from lpips import lpips
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--name', default='experiments', help='save result')
+parser.add_argument('--saveDir', default='experiments', help='save result')
 parser.add_argument('--gpu', type=int, default=0)
-parser.add_argument('--saveDir', default='test_results', help='datasave directory')
+parser.add_argument('--name', default='test_results', help='datasave directory')
 parser.add_argument('--load', default='NetFinal', help='save result')
 
 # dataPath
@@ -86,7 +86,7 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 def test(save, netG, lq, gt, idx, iters):
-    save_dir = os.path.join(args.saveDir, 'test_output')
+    save_dir = os.path.join(save.save_dir, 'result_image')
     if not os.path.exists(os.path.join(save_dir)):
         os.makedirs(save_dir)
 
@@ -250,7 +250,7 @@ def train(args):
                 lossPerc = tot_loss_Perc / args.period
 
                 # print
-                print("lr: ", lr)
+                #print("lr: ", lr)
                 log = "[{} / {}] lr: {} \t Reconstruction Loss: {:.8f} \t Perceptual Loss: {:.8f} \t Generator Loss: {:.8f} \t Discriminator Loss: {:.8f} \t PSNR: {:.4f} \t SSIM: {:.4f} \t LPIPS: {:.4f}".format(iters + 1, args.iter, lr, lossRecon, lossPerc, lossGAN, lossD, psnr, ssim, lpips_score)
                 print(log)
                 save.save_log(log)
