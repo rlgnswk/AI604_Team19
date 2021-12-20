@@ -21,7 +21,7 @@
 # Usage:
 
 ## Run on sample data:
-First, the sample data(Set5) already are placed in ```<ZSRGAN_path>/datasets/MySet5```
+First, the sample data(Degraded Set5) already are placed in ```<ZSRGAN_path>/datasets/MySet5```
 
 The results will save in ```<ZSRGAN_path>/experiments/```
 
