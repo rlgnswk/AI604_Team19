@@ -3,7 +3,25 @@
 
 -----------------
 
-# Overview:
+# Abstract:
+Deep learning based super-resolution (SR) is one of the
+most actively studied areas of computer vision. However,
+many of these studies are conducted on a supervised manner, requiring a large amount of data. There are several
+problems with this. First, the ground truth and input pair of
+the dataset is made using only a specific procedure, usually
+the bicubic downsampling. As a result, supervised SR works
+well only for these images, introducing a second problem
+where the model can not work well for test images not found
+in the training distribution. Based on this, it is difficult to
+say that these methods indeed is super-resolution for raw
+images found in the real world. In this paper, we introduce a
+novel network named Zero-shot Super-Resolution with Generative Adversarial Network (ZSRGAN) for real world image SR, which needs only one test image and does not rely
+on any other external datasets. Unlike existing methods,
+we propose optimization on the perceptual aspect as well
+as reconstruction of pixel units using zero-shot SR method.
+Therefore, through our proposed model, a real world image can be super resolved with the best perceptual quality
+without any information from additional datasets.
+
 
 ## Pipeline
 
