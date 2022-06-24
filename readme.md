@@ -1,5 +1,4 @@
 # ZSRGAN: Zero-shot Super-Resolution with Generative Adversarial Network(Pytorch)
-### 2021-fall-AI604-KAIST /  TEAM 19
 
 [Report](https://github.com/rlgnswk/ZSRGAN/blob/main/Report/ZSRGAN_Final_Report.pdf)
 
